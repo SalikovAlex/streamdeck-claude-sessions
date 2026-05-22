@@ -27,6 +27,7 @@ See [PUBLISHING.md](PUBLISHING.md) for release / Marketplace details.
   - One physical key does both jobs — summary card ⇄ Summarise button. (Detail caps at 7 sessions, since slot 0 is the toggle.)
 - The keys refresh every 2s while the **Claude Sessions** profile is showing; the plugin goes idle otherwise.
 - Press a session key → the matching iTerm2 window/tab is brought to the front.
+- **Property Inspector** (when you select a key in the Stream Deck app) shows an *Info* panel with the plugin version and a live status line (✅ tracking N sessions / ⚠️ Automation needed).
 
 ## How it works
 

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>Claude Sessions</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 6px 14px 16px;
+			font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+			font-size: 12px;
+			color: #c8c8c8;
+			background: #2d2d2d;
+		}
+		.divider {
+			display: flex;
+			align-items: center;
+			text-align: center;
+			color: #9a9a9a;
+			font-size: 11px;
+			margin: 14px 0 12px;
+		}
+		.divider::before, .divider::after {
+			content: "";
+			flex: 1;
+			border-bottom: 1px solid #4a4a4a;
+			margin: 0 10px;
+		}
+		.row { text-align: center; margin: 7px 0; line-height: 1.4; }
+		.ver { color: #9aa7b8; }
+		.ok { color: #2ec27e; }
+		.warn { color: #f5a623; }
+		.muted { color: #8a8a8a; }
+		.hint { font-size: 11px; color: #7f7f7f; margin-top: 2px; }
+		a { color: #6f9bd6; text-decoration: none; }
+	</style>
+</head>
+<body>
+	<div class="divider">Info</div>
+	<div class="row ver" id="version">Claude Sessions</div>
+	<div class="row" id="status"><span class="muted">Checking…</span></div>
+
+	<script>
+		let ws, piContext, actionUuid;
+
+		// Stream Deck calls this global when the property inspector loads.
+		function connectElgatoStreamDeckSocket(port, uuid, registerEvent, info, actionInfo) {
+			piContext = uuid;
+			try { actionUuid = JSON.parse(actionInfo).action; } catch (e) {}
+
+			let version = "";
+			try { version = (JSON.parse(info).plugin || {}).version || ""; } catch (e) {}
+			document.getElementById("version").textContent = "Claude Sessions" + (version ? " v" + version : "");
+
+			ws = new WebSocket("ws://127.0.0.1:" + port);
+			ws.onopen = function () {
+				ws.send(JSON.stringify({ event: registerEvent, uuid: uuid }));
+				requestStatus();
+			};
+			ws.onmessage = function (e) {
+				let m;
+				try { m = JSON.parse(e.data); } catch (_) { return; }
+				if (m.event === "sendToPropertyInspector") renderStatus(m.payload);
+			};
+		}
+
+		function requestStatus() {
+			if (ws && ws.readyState === 1 && actionUuid) {
+				ws.send(JSON.stringify({
+					event: "sendToPlugin",
+					action: actionUuid,
+					context: piContext,
+					payload: { request: "status" },
+				}));
+			}
+		}
+
+		function renderStatus(p) {
+			const el = document.getElementById("status");
+			if (!p || typeof p.sessions !== "number") return;
+			if (p.sessions === 0) {
+				el.innerHTML = '<span class="muted">○ No Claude sessions running</span>';
+			} else if (!p.itermOk) {
+				el.innerHTML =
+					'<span class="warn">⚠️ Enable Automation: Stream Deck → iTerm</span>' +
+					'<div class="hint">System Settings → Privacy &amp; Security → Automation</div>';
+			} else {
+				el.innerHTML = '<span class="ok">✅ Tracking ' + p.sessions + ' Claude session' + (p.sessions === 1 ? "" : "s") + "</span>";
+			}
+		}
+
+		// Refresh while the inspector is open.
+		setInterval(requestStatus, 2000);
+	</script>
+</body>
+</html>

@@ -99,6 +99,11 @@ export class SessionSlot extends SingletonAction {
 		}
 	}
 
+	/** The property inspector polls for status (version is read by the PI from its connection info). */
+	override async onSendToPlugin(): Promise<void> {
+		await streamDeck.ui.sendToPropertyInspector(await pluginStatus());
+	}
+
 	private ensureTimer(): void {
 		if (this.timer) return;
 		this.timer = setInterval(() => void this.refresh(), REFRESH_MS);
@@ -227,6 +232,17 @@ async function scanSessions(): Promise<Session[]> {
 
 	sessions.sort((a, b) => a.project.localeCompare(b.project) || a.pid - b.pid);
 	return sessions;
+}
+
+/** Snapshot for the property inspector: how many Claude sessions, and whether iTerm2 automation works. */
+async function pluginStatus(): Promise<{ sessions: number; itermOk: boolean }> {
+	try {
+		const iterm = await getItermSessions();
+		const sessions = await scanSessions();
+		return { sessions: sessions.length, itermOk: iterm.size > 0 };
+	} catch {
+		return { sessions: 0, itermOk: false };
+	}
 }
 
 /** Clean an iTerm2 tab name for display: drop leading status glyphs and the trailing " (cmd)". */
