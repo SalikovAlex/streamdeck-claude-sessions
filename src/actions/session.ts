@@ -50,17 +50,18 @@ export class SessionSlot extends SingletonAction {
 	private lastSignature = "";
 
 	override onWillAppear(ev: WillAppearEvent): void | Promise<void> {
+		// Repaint shortly after appearing too, so page switches settle before we read this.actions
+		// (during a page change the old page's keys can still be present for a tick).
 		this.ensureTimer();
+		setTimeout(() => void this.refresh(), 150);
 		return this.refresh();
 	}
 
-	override onWillDisappear(): void {
-		// When the Claude Sessions page is no longer shown, stop polling to stay idle.
-		const stillVisible = [...this.actions].some((a) => a.isKey());
-		if (!stillVisible && this.timer) {
-			clearInterval(this.timer);
-			this.timer = undefined;
-		}
+	override onWillDisappear(): void | Promise<void> {
+		// Repaint so the page we just switched TO is rendered. The timer keeps running for the
+		// plugin's lifetime (refresh early-returns cheaply when no keys are visible), which avoids
+		// timer stop/restart races when navigating between pages.
+		return this.refresh();
 	}
 
 	override async onKeyDown(ev: KeyDownEvent): Promise<void> {
@@ -121,9 +122,10 @@ export class SessionSlot extends SingletonAction {
 			streamDeck.logger.error(`scan failed: ${err}`);
 		}
 
-		const signature = `${viewMode}|` + sessions.map((s) => `${s.project}/${s.detail}[${s.status}]`).join(", ");
+		const totalKeys = [...groups.values()].reduce((n, k) => n + k.length, 0);
+		const signature = `${viewMode}|${totalKeys}|` + sessions.map((s) => `${s.project}/${s.detail}[${s.status}]`).join(", ");
 		if (signature !== this.lastSignature) {
-			streamDeck.logger.info(`[${viewMode}] ${sessions.length} session(s): ${signature.slice(viewMode.length + 1)}`);
+			streamDeck.logger.info(`[${viewMode}] ${totalKeys} key(s), ${sessions.length} session(s): ${sessions.map((s) => `${s.project}/${s.detail}[${s.status}]`).join(", ")}`);
 			this.lastSignature = signature;
 		}
 
