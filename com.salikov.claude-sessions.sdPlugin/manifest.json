@@ -1,0 +1,51 @@
+{
+	"Name": "Claude Sessions",
+	"Version": "0.1.0.0",
+	"Author": "Alexander Salikov",
+	"Actions": [
+		{
+			"Name": "Claude Session",
+			"UUID": "com.salikov.claude-sessions.slot",
+			"Icon": "imgs/actions/session/icon",
+			"Tooltip": "Shows a running Claude Code session. Press to jump to its iTerm2 tab.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/session/key",
+					"TitleAlignment": "middle",
+					"ShowTitle": false
+				}
+			]
+		}
+	],
+	"Category": "Claude Sessions",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"CodePath": "bin/plugin.js",
+	"Description": "Shows your running Claude Code (CLI) sessions on the keys with live status, and jumps to the matching iTerm2 tab when pressed. macOS + iTerm2 only.",
+	"URL": "https://github.com/SalikovAlex/streamdeck-claude-sessions",
+	"Icon": "imgs/plugin/icon",
+	"SDKVersion": 2,
+	"Software": {
+		"MinimumVersion": "6.6"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		}
+	],
+	"Profiles": [
+		{
+			"Name": "Claude Sessions",
+			"DeviceType": 7,
+			"Readonly": false,
+			"AutoInstall": true
+		}
+	],
+	"Nodejs": {
+		"Version": "20"
+	},
+	"UUID": "com.salikov.claude-sessions"
+}
