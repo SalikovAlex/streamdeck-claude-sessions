@@ -1,6 +1,6 @@
 {
 	"name": "streamdeck-claude-sessions",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Stream Deck + page that shows running Claude Code sessions and jumps to their iTerm2 tabs.",
 	"author": "Alexander Salikov",
 	"scripts": {

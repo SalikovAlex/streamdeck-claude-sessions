@@ -10,12 +10,8 @@ const PS = "/bin/ps";
 const LSOF = "/usr/sbin/lsof";
 const OSASCRIPT = "/usr/bin/osascript";
 
-/** Stream Deck + has 4 columns of keys (2 rows). slot = row * COLS + column. */
-const COLS = 4;
 /** How often the keys are refreshed from the live process list. */
 const REFRESH_MS = 2000;
-/** The top-left key (slot 0) is the unified summary/toggle key — never a session. */
-const CONTROL_SLOT = 0;
 
 /** "summary" shows an aggregate card (default); "detail" shows one session per key. */
 type ViewMode = "detail" | "summary";
@@ -39,10 +35,13 @@ type Session = {
 };
 
 /**
- * One key = one "slot". The slot index is derived from the key's coordinates, so the action works
- * no matter where the user places it. Every {@link REFRESH_MS} we scan the running `claude` processes
- * and paint slot N with session N (sorted by project, then pid). Pressing a key focuses the matching
- * iTerm2 tab.
+ * Each visible key of this action is assigned a role by its *relative position* among the action's
+ * keys on the same device (sorted by row, then column) — NOT by absolute coordinates. So it works in
+ * any profile, on any device, wherever the keys are placed:
+ *   - the first key (top-left-most) is the summary / toggle control;
+ *   - the remaining keys, in reading order, are session slots 0, 1, 2, …
+ * Every {@link REFRESH_MS} we scan the running `claude` processes and repaint. Pressing a session key
+ * focuses the matching iTerm2 tab.
  */
 @action({ UUID: "com.salikov.claude-sessions.slot" })
 export class SessionSlot extends SingletonAction {
@@ -65,7 +64,10 @@ export class SessionSlot extends SingletonAction {
 	}
 
 	override async onKeyDown(ev: KeyDownEvent): Promise<void> {
-		const slot = slotOf(ev.action);
+		// Position of the pressed key among this action's keys on the same device.
+		const keys = orderedKeysOnDevice(this.actions, ev.action.device.id);
+		const i = keys.findIndex((k) => k.id === ev.action.id);
+		if (i < 0) return;
 
 		// In summary view, any tap expands to the per-session view ("show all").
 		if (viewMode === "summary") {
@@ -74,16 +76,16 @@ export class SessionSlot extends SingletonAction {
 			return;
 		}
 
-		// In detail view, the control key collapses back to the summary ("summarise again").
-		if (slot === CONTROL_SLOT) {
+		// In detail view, the first key is the control — collapse back to the summary.
+		if (i === 0) {
 			viewMode = "summary";
 			await this.refresh();
 			return;
 		}
 
-		// Otherwise it's a session key (slots 1..7 -> session 0..6) — jump to its iTerm2 tab.
+		// Otherwise it's a session key (key index 1.. -> session 0..) — jump to its iTerm2 tab.
 		const sessions = await scanSessions().catch(() => [] as Session[]);
-		const target = slot >= 1 ? sessions[slot - 1] : undefined;
+		const target = sessions[i - 1];
 		if (!target) {
 			await ev.action.showAlert();
 			return;
@@ -103,8 +105,9 @@ export class SessionSlot extends SingletonAction {
 	}
 
 	private async refresh(): Promise<void> {
-		const visible = [...this.actions].filter((a): a is KeyAction => a.isKey());
-		if (visible.length === 0) return; // page not shown — skip the scan entirely
+		// Group this action's visible keys by device, each sorted into reading order.
+		const groups = keysByDevice(this.actions);
+		if (groups.size === 0) return; // not shown anywhere — skip the scan entirely
 
 		let sessions: Session[] = [];
 		try {
@@ -119,25 +122,26 @@ export class SessionSlot extends SingletonAction {
 			this.lastSignature = signature;
 		}
 
-		for (const a of visible) {
-			const slot = slotOf(a);
-			try {
-				await a.setTitle("");
-				await a.setImage(toDataUri(renderKey(slot, sessions)));
-			} catch (err) {
-				streamDeck.logger.error(`setImage failed (slot ${slot}): ${err}`);
+		for (const keys of groups.values()) {
+			for (let i = 0; i < keys.length; i++) {
+				try {
+					await keys[i].setTitle("");
+					await keys[i].setImage(toDataUri(renderForIndex(i, sessions)));
+				} catch (err) {
+					streamDeck.logger.error(`setImage failed (key ${i}): ${err}`);
+				}
 			}
 		}
 	}
 }
 
-/** Decide what a given slot should display given the current view mode. */
-function renderKey(slot: number, sessions: Session[]): string {
-	// The control key is the summary card in summary view, and the "Summarise" toggle in detail view.
-	if (slot === CONTROL_SLOT) return viewMode === "summary" ? renderSummary(sessions) : renderControl(sessions);
-	// Other keys: blank in summary view; one session each (slot 1..7 -> session 0..6) in detail view.
+/** Decide what the key at relative index {@link i} should display given the current view mode. */
+function renderForIndex(i: number, sessions: Session[]): string {
+	// Index 0 is the control: summary card in summary view, "Summarise" toggle in detail view.
+	if (i === 0) return viewMode === "summary" ? renderSummary(sessions) : renderControl(sessions);
+	// Other keys: blank in summary view; one session each (index 1.. -> session 0..) in detail view.
 	if (viewMode === "summary") return renderDim();
-	return renderSvg(sessions[slot - 1]);
+	return renderSvg(sessions[i - 1]);
 }
 
 /** Stream Deck's setImage is most reliable with a base64-encoded data URI. */
@@ -145,11 +149,27 @@ function toDataUri(svg: string): string {
 	return `data:image/svg+xml;base64,${Buffer.from(svg, "utf-8").toString("base64")}`;
 }
 
-/** Derive the slot index (0-based) from a key action's coordinates. */
-function slotOf(a: KeyAction | { coordinates?: { column: number; row: number } }): number {
-	const c = (a as KeyAction).coordinates;
-	if (!c) return -1;
-	return c.row * COLS + c.column;
+/** This action's visible keys, grouped by device id, each sorted by row then column (reading order). */
+function keysByDevice(actions: Iterable<{ isKey(): boolean }>): Map<string, KeyAction[]> {
+	const groups = new Map<string, KeyAction[]>();
+	for (const a of actions) {
+		if (!a.isKey()) continue;
+		const key = a as unknown as KeyAction;
+		const c = key.coordinates;
+		if (!c) continue; // e.g. part of a multi-action
+		const list = groups.get(key.device.id) ?? [];
+		list.push(key);
+		groups.set(key.device.id, list);
+	}
+	for (const list of groups.values()) {
+		list.sort((x, y) => x.coordinates!.row - y.coordinates!.row || x.coordinates!.column - y.coordinates!.column);
+	}
+	return groups;
+}
+
+/** Convenience for {@link onKeyDown}: this action's keys on one device, in reading order. */
+function orderedKeysOnDevice(actions: Iterable<{ isKey(): boolean }>, deviceId: string): KeyAction[] {
+	return keysByDevice(actions).get(deviceId) ?? [];
 }
 
 type Proc = { pid: number; ppid: number; tty: string; args: string };
