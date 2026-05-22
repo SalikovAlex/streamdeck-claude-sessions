@@ -26,9 +26,9 @@
 	"Description": "Shows your running Claude Code (CLI) sessions on the keys with live status, and jumps to the matching iTerm2 tab when pressed. macOS + iTerm2 only.",
 	"URL": "https://github.com/SalikovAlex/streamdeck-claude-sessions",
 	"Icon": "imgs/plugin/icon",
-	"SDKVersion": 2,
+	"SDKVersion": 3,
 	"Software": {
-		"MinimumVersion": "6.6"
+		"MinimumVersion": "6.9"
 	},
 	"OS": [
 		{

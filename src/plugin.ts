@@ -1,8 +1,8 @@
-import streamDeck, { LogLevel } from "@elgato/streamdeck";
+import streamDeck from "@elgato/streamdeck";
 
 import { SessionSlot } from "./actions/session";
 
-streamDeck.logger.setLevel(LogLevel.INFO);
+streamDeck.logger.setLevel("info");
 
 streamDeck.actions.registerAction(new SessionSlot());
 
