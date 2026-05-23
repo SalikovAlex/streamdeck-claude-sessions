@@ -21,11 +21,10 @@ See [PUBLISHING.md](PUBLISHING.md) for release / Marketplace details.
   - ⚪ **idle** (grey) — no recognisable Claude state.
   - Note: a permission/question prompt and "finished, ready" both surface as `✳` from outside the process, so both read as **your turn** — they can't be told apart without cooperation from Claude Code itself.
 - Empty slots show a dim `empty` placeholder.
-- **Summary / detail toggle — one key (top-left, slot 0).**
-  - *Summary* (default): the top-left key is an aggregate card — `N Claude` with per-status counts (working / your turn / idle) and a `▸ show all` hint; the other keys are dim. Tap anything to expand.
-  - *Detail*: the top-left key becomes the **≡ Summarise** button (with a green badge of how many sessions need you), and the 7 sessions fill slots 1–7. Tap a session to jump to its iTerm2 tab; tap **Summarise** to collapse.
-  - One physical key does both jobs — summary card ⇄ Summarise button. (Detail caps at 7 sessions, since slot 0 is the toggle.)
-- The keys refresh every 2s while the **Claude Sessions** profile is showing; the plugin goes idle otherwise.
+- **Two ways to use it (keys self-assign roles by relative position — works in any profile/device):**
+  - **The deck** (the bundled *Claude Sessions* profile, or any profile with ≥2 of the keys): shows **all sessions**; the first key is a **`‹ Summary`** control that returns to the previous profile (badged with how many sessions need you). Tap a session to jump to its iTerm2 tab.
+  - **A lone key** (drop a single Claude Session action into any other profile, e.g. *Wave Link SD+*): a compact **summary card** — `N Claude` with per-status counts and a `▸ show all` hint. Tap it to open the full deck; tap `‹ Summary` there to come back.
+- The keys refresh every 2s while visible; the plugin goes idle otherwise.
 - Press a session key → the matching iTerm2 window/tab is brought to the front.
 - **Property Inspector** (when you select a key in the Stream Deck app) shows an *Info* panel with the plugin version and a live status line (✅ tracking N sessions / ⚠️ Automation needed).
 

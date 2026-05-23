@@ -1,4 +1,4 @@
-import streamDeck, { action, KeyAction, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+import streamDeck, { action, KeyAction, KeyDownEvent, SingletonAction } from "@elgato/streamdeck";
 import { execFile } from "node:child_process";
 import { basename } from "node:path";
 import { promisify } from "node:util";
@@ -13,9 +13,8 @@ const OSASCRIPT = "/usr/bin/osascript";
 /** How often the keys are refreshed from the live process list. */
 const REFRESH_MS = 2000;
 
-/** "summary" shows an aggregate card (default); "detail" shows one session per key. */
-type ViewMode = "detail" | "summary";
-let viewMode: ViewMode = "summary"; // plugin-global (shared across all key instances)
+/** Name of the bundled profile we open from a lone status key. Must match manifest Profiles[].Name. */
+const DECK_PROFILE = "Claude Sessions";
 
 /**
  * Status inferred from the iTerm2 tab title that Claude Code sets:
@@ -35,33 +34,39 @@ type Session = {
 };
 
 /**
- * Each visible key of this action is assigned a role by its *relative position* among the action's
- * keys on the same device (sorted by row, then column) — NOT by absolute coordinates. So it works in
- * any profile, on any device, wherever the keys are placed:
- *   - the first key (top-left-most) is the summary / toggle control;
- *   - the remaining keys, in reading order, are session slots 0, 1, 2, …
- * Every {@link REFRESH_MS} we scan the running `claude` processes and repaint. Pressing a session key
- * focuses the matching iTerm2 tab.
+ * Each visible key is assigned a role by its *relative position* among the action's keys on the same
+ * device (sorted by row, then column) — NOT by absolute coordinates — so it works in any profile, on
+ * any device, wherever the keys are placed:
+ *   - A single key on its own = a status widget (summary card); pressing it opens the bundled
+ *     "Claude Sessions" deck (showing all sessions).
+ *   - With several keys (the deck): the first key is a "‹ Summary" control that returns to the
+ *     previous profile; the rest are sessions in reading order — press one to focus its iTerm2 tab.
+ * Every {@link REFRESH_MS} we scan the running `claude` processes and repaint.
  */
 @action({ UUID: "com.salikov.claude-sessions.slot" })
 export class SessionSlot extends SingletonAction {
 	private timer?: ReturnType<typeof setInterval>;
+	private debounce?: ReturnType<typeof setTimeout>;
 
 	private lastSignature = "";
 
-	override onWillAppear(ev: WillAppearEvent): void | Promise<void> {
-		// Repaint shortly after appearing too, so page switches settle before we read this.actions
-		// (during a page change the old page's keys can still be present for a tick).
+	override onWillAppear(): void {
+		// Don't paint mid-transition: during a page/profile switch keys appear one-by-one, and a lone
+		// transient key would briefly render the summary card. Debounce so we only paint once the new
+		// profile has settled (each appearing key reschedules the repaint).
 		this.ensureTimer();
-		setTimeout(() => void this.refresh(), 150);
-		return this.refresh();
+		this.scheduleRefresh();
 	}
 
-	override onWillDisappear(): void | Promise<void> {
-		// Repaint so the page we just switched TO is rendered. The timer keeps running for the
-		// plugin's lifetime (refresh early-returns cheaply when no keys are visible), which avoids
-		// timer stop/restart races when navigating between pages.
-		return this.refresh();
+	override onWillDisappear(): void {
+		// Same debounce when leaving — render the page we switched TO once it settles. The timer keeps
+		// running for the plugin's lifetime (refresh early-returns cheaply when nothing is visible).
+		this.scheduleRefresh();
+	}
+
+	private scheduleRefresh(): void {
+		clearTimeout(this.debounce);
+		this.debounce = setTimeout(() => void this.refresh(), 130);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent): Promise<void> {
@@ -70,17 +75,15 @@ export class SessionSlot extends SingletonAction {
 		const i = keys.findIndex((k) => k.id === ev.action.id);
 		if (i < 0) return;
 
-		// In summary view, any tap expands to the per-session view ("show all").
-		if (viewMode === "summary") {
-			viewMode = "detail";
-			await this.refresh();
+		// A lone key is a status widget — tapping opens the full Claude Sessions deck (all sessions).
+		if (keys.length === 1) {
+			await switchProfile(ev.action, DECK_PROFILE);
 			return;
 		}
 
-		// In detail view, the first key is the control — collapse back to the summary.
+		// In the deck, the first key is the "‹ Summary" control — go back to the previous profile.
 		if (i === 0) {
-			viewMode = "summary";
-			await this.refresh();
+			await switchProfile(ev.action, undefined);
 			return;
 		}
 
@@ -123,17 +126,19 @@ export class SessionSlot extends SingletonAction {
 		}
 
 		const totalKeys = [...groups.values()].reduce((n, k) => n + k.length, 0);
-		const signature = `${viewMode}|${totalKeys}|` + sessions.map((s) => `${s.project}/${s.detail}[${s.status}]`).join(", ");
+		const signature = `${totalKeys}|` + sessions.map((s) => `${s.project}/${s.detail}[${s.status}]`).join(", ");
 		if (signature !== this.lastSignature) {
-			streamDeck.logger.info(`[${viewMode}] ${totalKeys} key(s), ${sessions.length} session(s): ${sessions.map((s) => `${s.project}/${s.detail}[${s.status}]`).join(", ")}`);
+			streamDeck.logger.info(`${totalKeys} key(s), ${sessions.length} session(s): ${sessions.map((s) => `${s.project}/${s.detail}[${s.status}]`).join(", ")}`);
 			this.lastSignature = signature;
 		}
 
 		for (const keys of groups.values()) {
+			// A single key on its own is a standalone summary/status widget; otherwise it's the deck.
+			const solo = keys.length === 1;
 			for (let i = 0; i < keys.length; i++) {
 				try {
 					await keys[i].setTitle("");
-					await keys[i].setImage(toDataUri(renderForIndex(i, sessions)));
+					await keys[i].setImage(toDataUri(solo ? renderSummary(sessions) : renderForIndex(i, sessions)));
 				} catch (err) {
 					streamDeck.logger.error(`setImage failed (key ${i}): ${err}`);
 				}
@@ -142,13 +147,20 @@ export class SessionSlot extends SingletonAction {
 	}
 }
 
-/** Decide what the key at relative index {@link i} should display given the current view mode. */
+/** In the deck: key 0 is the "‹ Summary" control (back to previous profile); the rest are sessions. */
 function renderForIndex(i: number, sessions: Session[]): string {
-	// Index 0 is the control: summary card in summary view, "Summarise" toggle in detail view.
-	if (i === 0) return viewMode === "summary" ? renderSummary(sessions) : renderControl(sessions);
-	// Other keys: blank in summary view; one session each (index 1.. -> session 0..) in detail view.
-	if (viewMode === "summary") return renderDim();
+	if (i === 0) return renderControl(sessions);
 	return renderSvg(sessions[i - 1]);
+}
+
+/** Switch the device's profile (to {@link profile}, or back to the previous one when undefined). */
+async function switchProfile(action: { device: { id: string }; showAlert(): Promise<void> }, profile?: string): Promise<void> {
+	try {
+		await streamDeck.profiles.switchToProfile(action.device.id, profile);
+	} catch (err) {
+		streamDeck.logger.error(`switchToProfile(${profile ?? "previous"}) failed: ${err}`);
+		await action.showAlert();
+	}
 }
 
 /** Stream Deck's setImage is most reliable with a base64-encoded data URI. */
@@ -433,13 +445,11 @@ ${row(112, "idle", c.idle)}
 </svg>`;
 }
 
-/** The control key shown in detail view — collapses back to the summary. Badges the count needing you. */
+/** The deck's first key — "‹ Summary": returns to the previous profile. Badges the count needing you. */
 function renderControl(sessions: Session[]): string {
 	const W = 144;
 	const H = 144;
 	const needYou = countByStatus(sessions).waiting;
-	const glyph = "≡";
-	const label = "Summarise";
 	const badge =
 		needYou > 0
 			? `<circle cx="118" cy="26" r="13" fill="${STATUS_THEME.waiting.color}"/>` +
@@ -448,15 +458,8 @@ function renderControl(sessions: Session[]): string {
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 <rect width="${W}" height="${H}" rx="16" fill="#1b2433"/>
 <rect width="${W}" height="11" fill="#3d6fb0"/>
-<text x="72" y="84" font-family="${FONT}" font-weight="700" font-size="40" fill="#9fc1ee" text-anchor="middle">${glyph}</text>
-<text x="72" y="118" font-family="${FONT}" font-weight="600" font-size="17" fill="#cdd9e8" text-anchor="middle">${label}</text>
+<text x="72" y="86" font-family="${FONT}" font-weight="700" font-size="44" fill="#9fc1ee" text-anchor="middle">‹</text>
+<text x="72" y="118" font-family="${FONT}" font-weight="600" font-size="17" fill="#cdd9e8" text-anchor="middle">Summary</text>
 ${badge}
 </svg>`;
-}
-
-/** A dim filler key shown in summary mode for the non-summary, non-control slots. */
-function renderDim(): string {
-	const W = 144;
-	const H = 144;
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" rx="16" fill="#0b0f15"/></svg>`;
 }
