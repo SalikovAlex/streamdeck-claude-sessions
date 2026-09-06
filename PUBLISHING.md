@@ -4,13 +4,15 @@ Two channels: **GitHub** (source + releases) and the **Elgato Marketplace** (one
 
 ---
 
-## 1. GitHub (open source)
+## 1. GitHub releases
 
 The repo is MIT-licensed and self-contained.
 
 **Release flow:**
 ```sh
 npm ci
+npm test
+npm run typecheck
 npm run build
 node scripts/build-profile.mjs
 bash scripts/build-icons.sh            # regenerate icons (optional; committed already)
@@ -24,7 +26,7 @@ Tag releases to match the manifest `Version` (e.g. `v0.1.0`).
 
 ## 2. Elgato Marketplace
 
-Portal: <https://marketplace.elgato.com/maker> (sign in with an Elgato/Maker account).
+Portal: <https://maker.elgato.com/> (sign in with an Elgato/Maker account).
 
 ### Manifest readiness (done in this repo)
 - [x] `Name`, `Author`, `Version` (`{major}.{minor}.{patch}.{build}`), `UUID` (reverse-DNS)
@@ -42,29 +44,18 @@ Follow the exact dimensions the portal shows at upload time. Typically you provi
 - [ ] **Category** + tags
 - [ ] Support / homepage URL (the GitHub repo)
 
-### Draft listing copy
-- **Name:** Claude Sessions *(see trademark note — consider "Claude Code Session Switcher (unofficial)")*
-- **Tagline:** See and switch between your running Claude Code sessions from the Stream Deck +.
-- **Long description:**
-  > A page of keys, one per running Claude Code (CLI) session, each showing its project and a
-  > live status — **working** (thinking / running a tool), **your turn** (finished or awaiting a
-  > prompt/confirmation), or **idle**. Press a key to jump straight to that session's iTerm2 tab.
-  > A summary card aggregates how many sessions need you. **macOS + iTerm2 only.**
+### Listing copy and disclosures
 
-### Must disclose in the listing (and gate review)
-- [ ] **macOS only**, **iTerm2 only**, designed for **Stream Deck +** (2×4 keys).
-- [ ] Requires granting **Automation** permission (Stream Deck → iTerm) on first use.
-- [ ] Reads the running `claude` processes + iTerm2 tab titles locally; sends nothing off-machine.
+Use [marketplace/listing.md](marketplace/listing.md) for the current name, descriptions, version notes, and asset paths. Regenerate screenshots with `node scripts/build-marketplace-assets.mjs` when the key layout or provider labels change, and visually inspect every generated image.
 
-### ⚠️ Trademark — read before submitting
-"Claude" and "Claude Code" are trademarks of **Anthropic**. This is an **unofficial, community** plugin
-with no affiliation or endorsement. Before a public listing:
-- Consider a descriptive, clearly-unofficial name (e.g. *"Session Switcher for Claude Code (unofficial)"*).
-- Add an "unofficial / not affiliated with Anthropic" disclaimer to the listing and README.
-- The icon uses generic terminal artwork (no Anthropic logo) — keep it that way.
-- Elgato review may ask for permission/justification to use a third-party brand name. Be ready to rename.
+The listing must describe macOS and Stream Deck + requirements, iTerm2/Automation requirements for CLI navigation, local-only Codex desktop coverage, approximate Codex approval status, and the unofficial status of the plugin. Keep the generic terminal icon; do not imply endorsement by Anthropic or OpenAI.
+
+The source repository is currently private. Its URL returns 404 to unauthenticated users, so `streamdeck validate` reports a URL warning. Do not change repository visibility as part of a release without explicit authorization. Preserve the existing Marketplace support destination unless the owner provides a replacement.
 
 ### Submit
 1. `streamdeck pack com.salikov.claude-sessions.sdPlugin --force`
-2. Upload the `.streamDeckPlugin` in the Maker portal, fill the listing, attach assets.
-3. Submit for review; address any feedback; publish.
+2. Sign in to the [Maker Console](https://maker.elgato.com/) and open the existing product; create a version update instead of a duplicate listing.
+3. Upload the `.streamDeckPlugin`, add the version notes, and update listing copy/assets as needed.
+4. Submit for review and verify the resulting status. Upload, review submission, and Marketplace publication are distinct states; report the state the portal actually confirms.
+
+Current official workflow: [Managing Products](https://docs.elgato.com/maker-console/managing-products).

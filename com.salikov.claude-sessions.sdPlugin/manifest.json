@@ -1,14 +1,14 @@
 {
-	"Name": "Claude Sessions",
-	"Version": "0.1.1.0",
+	"Name": "Claude & Codex Sessions",
+	"Version": "0.2.0.0",
 	"Author": "Alexander Salikov",
 	"Actions": [
 		{
-			"Name": "Claude Session",
+			"Name": "Agent Session",
 			"UUID": "com.salikov.claude-sessions.slot",
 			"Icon": "imgs/actions/session/icon",
 			"PropertyInspectorPath": "ui/session.html",
-			"Tooltip": "Shows a running Claude Code session. Press to jump to its iTerm2 tab.",
+			"Tooltip": "Shows a Claude Code or Codex session. Press to open its iTerm2 tab or Codex desktop task.",
 			"Controllers": [
 				"Keypad"
 			],
@@ -21,10 +21,10 @@
 			]
 		}
 	],
-	"Category": "Claude Sessions",
+	"Category": "Claude & Codex Sessions",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
-	"Description": "Shows your running Claude Code (CLI) sessions on the keys with live status, and jumps to the matching iTerm2 tab when pressed. macOS + iTerm2 only.",
+	"Description": "Shows Claude Code and Codex CLI sessions plus loaded Codex desktop tasks with live status. Press to open the matching iTerm2 tab or Codex task. macOS only; CLI navigation requires iTerm2.",
 	"URL": "https://github.com/SalikovAlex/streamdeck-claude-sessions",
 	"Icon": "imgs/plugin/icon",
 	"SDKVersion": 3,

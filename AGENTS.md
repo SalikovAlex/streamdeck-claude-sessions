@@ -4,8 +4,8 @@ Guidance for AI agents and contributors working on this repo. Keep it current wh
 
 ## What this is
 
-A **macOS Stream Deck + plugin** that shows running **Claude Code (CLI)** sessions on the keys with
-live status, and jumps to the matching **iTerm2** tab on press. Unofficial; not affiliated with Anthropic.
+A **macOS Stream Deck + plugin** that shows running **Claude Code CLI, Codex CLI, and loaded Codex desktop** sessions on the keys with
+live status, and opens the matching **iTerm2** tab or **Codex desktop task** on press. Unofficial; not affiliated with Anthropic or OpenAI.
 
 - Plugin UUID: `com.salikov.claude-sessions`
 - Action UUID: `com.salikov.claude-sessions.slot`
@@ -17,7 +17,11 @@ live status, and jumps to the matching **iTerm2** tab on press. Unofficial; not 
 
 ```
 src/plugin.ts                         entry: registers the action, connects
-src/actions/session.ts                ALL logic lives here (detection, rendering, input)
+src/actions/session.ts                rendering, input, and Property Inspector status
+src/sessions.ts                       shared types, process detection, CLI labels and TTY/status helpers
+src/scanner.ts                        live process/file scanning and iTerm2 enumeration
+src/codex.ts                          read-only Codex metadata, turn history, rollout fallback, task links
+tests/                               regression fixtures and temporary TypeScript test runtime
 com.salikov.claude-sessions.sdPlugin/ the plugin bundle
   manifest.json                       action, Profiles[], SDKVersion, OS, Node
   bin/plugin.js                       rollup output (generated — do not edit)
@@ -27,7 +31,8 @@ com.salikov.claude-sessions.sdPlugin/ the plugin bundle
 scripts/build-profile.mjs             regenerate the bundled deck profile
 scripts/build-icons.sh                regenerate plugin/action icons (qlmanage + sips)
 scripts/build-marketplace-assets.mjs  marketplace icon/thumbnail/gallery (Chrome headless)
-marketplace/                          listing assets
+marketplace/                          listing copy (listing.md) and generated images
+CHANGELOG.md                          versioned release notes
 ```
 
 ## Commands
@@ -36,6 +41,8 @@ The Elgato CLI may not be on `PATH`; use `npx @elgato/cli <cmd>` (or `streamdeck
 
 ```sh
 npm install
+npm test
+npm run typecheck
 npm run build                                   # src -> bin/plugin.js
 streamdeck link  com.salikov.claude-sessions.sdPlugin
 streamdeck restart com.salikov.claude-sessions  # after every rebuild
@@ -48,10 +55,10 @@ npm run watch                                   # rebuild + restart on change
 
 Dev mode must be enabled once: `streamdeck dev`.
 
-## How it works (session.ts)
+## How it works
 
-1. `ps -axo pid=,ppid=,tty=,args=` — a session is any process whose argv0 basename is `claude`.
-2. `lsof -d cwd` — resolve each session's working dir → project name.
+1. `ps -axo pid=,ppid=,tty=,args=` — detect `claude`, interactive `codex` (native/npm wrapper), and Codex app servers inside `Codex.app` or `ChatGPT.app`. Deduplicate npm wrappers; exclude CLI service/noninteractive subcommands and non-desktop app servers.
+2. `lsof -d cwd` resolves CLI projects. Open Codex `thread-writer-locks/*.lock` and `sessions/**/rollout-*.jsonl` identify loaded task IDs and their Codex home. Only live process-owned files count; never scan all saved tasks.
 3. iTerm2 via `osascript` → map of session tty → tab title (also gives status + `is processing`).
 4. **tty resolution:** an iTerm2 session is `login → zsh (qterm) → zsh → claude`; qterm allocates a
    fresh pty, so the claude process's own tty is NOT the tab's tty. Walk the process ancestry until an
@@ -59,16 +66,21 @@ Dev mode must be enabled once: `streamdeck dev`.
 5. **Status** from the leading glyph of the tab title: braille spinner = `working`; `✳` = `your turn`
    (finished / asking / needs confirm); else `idle`. (A pending prompt and "done" both read as `✳` —
    indistinguishable from outside the process.)
-6. **Key roles by relative position** (per device, sorted by row then column — never absolute coords):
+6. **Codex status** comes from the latest local `thread_turns` row (`inProgress` → working; completed/interrupted/failed → your turn), falling back to bounded rollout lifecycle reads and CLI output activity. Approval/question prompts may remain working. Read SQLite with `/usr/bin/sqlite3 -readonly`; exclude archived tasks and subagents. Desktop presses use `/usr/bin/open codex://threads/<validated UUID>`.
+7. **Key roles by relative position** (per device, sorted by row then column — never absolute coords):
    - **1 key** = a standalone summary card; press → `switchToProfile("Claude Sessions")` (the deck).
    - **≥2 keys** (the deck) = first key is a `‹ Summary` control (press → `switchToProfile(undefined)`,
-     i.e. previous profile); the rest are sessions in order; press → focus the iTerm2 tab.
-7. Keys are SVG passed to `setImage` as a **base64 data URI**.
+     i.e. previous profile); the rest are sessions in order; press → focus iTerm2 or open the Codex task.
+8. Keys are SVG passed to `setImage` as a **base64 data URI**.
 
 ## Non-obvious gotchas (do not regress these)
 
+- **Compatibility.** Keep both UUIDs and the bundled profile name `Claude Sessions` unchanged. The display name is `Claude & Codex Sessions`; the action is `Agent Session`.
+- **Codex desktop.** Local loaded tasks only, no remote/cloud/VS Code catalog. Internal SQLite/rollout schemas may change. Discover the home from process-owned files, support missing databases and partial writes, and keep reads bounded/read-only. Desktop-only use must not request iTerm2 Automation.
+- **Identity.** Key presses use the displayed session ID and revalidate that it still exists, rather than selecting the current array index after reordering. Poll/PI/press scans share an in-flight promise; refreshes do not overlap.
+
 - **Absolute tool paths.** The plugin runs with a minimal PATH; `lsof` is `/usr/sbin/lsof` (not on it).
-  Use the `PS`/`LSOF`/`OSASCRIPT` constants, never bare command names.
+  Use absolute paths for `ps`, `lsof`, `osascript`, `sqlite3`, and `open`, never bare command names.
 - **iTerm2 Automation (TCC).** Names + focus need *System Settings → Privacy & Security → Automation →
   Elgato Stream Deck → iTerm*. A denied/background AppleEvent fails silently (returns empty); grants
   require a plugin restart to take effect.
@@ -88,7 +100,7 @@ Dev mode must be enabled once: `streamdeck dev`.
 ## Verifying changes
 
 - After `streamdeck restart`, read `com.salikov.claude-sessions.sdPlugin/logs/*.log`. One change-gated
-  line per state: `"<N> key(s), <M> session(s): <project>/<label>[<status>], …"`. Errors are logged.
+  line per state: `"<N> key(s), <M> session(s): <provider>/<source>:<project>/<label>[<status>], …"`. Errors are logged.
 - Visual checks (key images, the PI Info panel) require looking at the physical Stream Deck + / the app.
 - `streamdeck validate` may warn `URL should return success` — transient health-check of the manifest
   `URL`; safe to ignore when the repo is reachable.

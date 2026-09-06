@@ -1,14 +1,17 @@
 import streamDeck, { action, KeyAction, KeyDownEvent, SingletonAction } from "@elgato/streamdeck";
 import { execFile } from "node:child_process";
-import { basename } from "node:path";
 import { promisify } from "node:util";
+import { codexTaskUrl } from "../codex";
+import { type Session, type SessionStatus } from "../sessions";
+import { createScanner, getItermSessions } from "../scanner";
 
-const pexec = promisify(execFile);
+const exec = promisify(execFile);
+const pexec = (file: string, args: string[]) => exec(file, args, { timeout: 3000, maxBuffer: 8 * 1024 * 1024 });
 
-// Absolute paths — Stream Deck runs the plugin with a minimal PATH that omits /usr/sbin (lsof).
-const PS = "/bin/ps";
-const LSOF = "/usr/sbin/lsof";
+// Absolute paths — Stream Deck runs the plugin with a minimal PATH.
 const OSASCRIPT = "/usr/bin/osascript";
+const OPEN = "/usr/bin/open";
+const scanSessions = createScanner((message) => streamDeck.logger.debug(message));
 
 /** How often the keys are refreshed from the live process list. */
 const REFRESH_MS = 2000;
@@ -17,31 +20,14 @@ const REFRESH_MS = 2000;
 const DECK_PROFILE = "Claude Sessions";
 
 /**
- * Status inferred from the iTerm2 tab title that Claude Code sets:
- *  - "working": a braille spinner glyph (Claude is thinking / running a tool), or the session is producing output.
- *  - "waiting": the "✳" glyph — Claude finished its turn and wants you (next prompt, a question, or a permission confirm).
- *  - "idle": no recognisable Claude glyph (e.g. plain shell).
- */
-type SessionStatus = "working" | "waiting" | "idle";
-
-type Session = {
-	pid: number;
-	tty: string; // e.g. /dev/ttys003
-	cwd: string;
-	project: string; // basename of cwd
-	detail: string; // resume label or iTerm2 tab name
-	status: SessionStatus;
-};
-
-/**
  * Each visible key is assigned a role by its *relative position* among the action's keys on the same
  * device (sorted by row, then column) — NOT by absolute coordinates — so it works in any profile, on
  * any device, wherever the keys are placed:
  *   - A single key on its own = a status widget (summary card); pressing it opens the bundled
- *     "Claude Sessions" deck (showing all sessions).
+ *     "Claude Sessions" deck.
  *   - With several keys (the deck): the first key is a "‹ Summary" control that returns to the
- *     previous profile; the rest are sessions in reading order — press one to focus its iTerm2 tab.
- * Every {@link REFRESH_MS} we scan the running `claude` processes and repaint.
+ *     previous profile; the rest are sessions in reading order — press one to open its iTerm2 tab or Codex task.
+ * Every {@link REFRESH_MS} we scan Claude/Codex CLI processes and loaded Codex desktop tasks and repaint.
  */
 @action({ UUID: "com.salikov.claude-sessions.slot" })
 export class SessionSlot extends SingletonAction {
@@ -49,6 +35,8 @@ export class SessionSlot extends SingletonAction {
 	private debounce?: ReturnType<typeof setTimeout>;
 
 	private lastSignature = "";
+	private refreshing = false;
+	private displayedSessions = new Map<string, Session>();
 
 	override onWillAppear(): void {
 		// Don't paint mid-transition: during a page/profile switch keys appear one-by-one, and a lone
@@ -87,18 +75,24 @@ export class SessionSlot extends SingletonAction {
 			return;
 		}
 
-		// Otherwise it's a session key (key index 1.. -> session 0..) — jump to its iTerm2 tab.
-		const sessions = await scanSessions().catch(() => [] as Session[]);
-		const target = sessions[i - 1];
+		// Otherwise it is a session key — open its terminal tab or desktop task.
+		// Use the task painted on this key; a fresh scan can reorder sessions during a press.
+		const target = this.displayedSessions.get(ev.action.id);
 		if (!target) {
 			await ev.action.showAlert();
 			return;
 		}
 		try {
-			const ok = await focusTty(target.tty);
-			if (!ok) await ev.action.showAlert();
+			const live = await scanSessions();
+			if (!live.some((s) => s.id === target.id)) {
+				await ev.action.showAlert();
+				return;
+			}
+			if (target.source === "desktop" && target.threadId) {
+				await pexec(OPEN, [codexTaskUrl(target.threadId)]);
+			} else if (!await focusTty(target.tty)) await ev.action.showAlert();
 		} catch (err) {
-			streamDeck.logger.error(`focus failed for ${target.tty}: ${err}`);
+			streamDeck.logger.error(`focus failed for ${target.id}: ${err}`);
 			await ev.action.showAlert();
 		}
 	}
@@ -114,6 +108,13 @@ export class SessionSlot extends SingletonAction {
 	}
 
 	private async refresh(): Promise<void> {
+		if (this.refreshing) return;
+		this.refreshing = true;
+		try { await this.refreshKeys(); }
+		finally { this.refreshing = false; }
+	}
+
+	private async refreshKeys(): Promise<void> {
 		// Group this action's visible keys by device, each sorted into reading order.
 		const groups = keysByDevice(this.actions);
 		if (groups.size === 0) return; // not shown anywhere — skip the scan entirely
@@ -126,12 +127,15 @@ export class SessionSlot extends SingletonAction {
 		}
 
 		const totalKeys = [...groups.values()].reduce((n, k) => n + k.length, 0);
-		const signature = `${totalKeys}|` + sessions.map((s) => `${s.project}/${s.detail}[${s.status}]`).join(", ");
+		const summary = sessions.map((s) => `${s.provider}/${s.source}:${s.project}/${s.detail}[${s.status}]`).join(", ");
+		const signature = `${totalKeys}|${summary}`;
 		if (signature !== this.lastSignature) {
-			streamDeck.logger.info(`${totalKeys} key(s), ${sessions.length} session(s): ${sessions.map((s) => `${s.project}/${s.detail}[${s.status}]`).join(", ")}`);
+			streamDeck.logger.info(`${totalKeys} key(s), ${sessions.length} session(s): ${summary}`);
 			this.lastSignature = signature;
 		}
 
+		const visibleIds = new Set([...groups.values()].flat().map((key) => key.id));
+		for (const id of this.displayedSessions.keys()) if (!visibleIds.has(id)) this.displayedSessions.delete(id);
 		for (const keys of groups.values()) {
 			// A single key on its own is a standalone summary/status widget; otherwise it's the deck.
 			const solo = keys.length === 1;
@@ -139,6 +143,9 @@ export class SessionSlot extends SingletonAction {
 				try {
 					await keys[i].setTitle("");
 					await keys[i].setImage(toDataUri(solo ? renderSummary(sessions) : renderForIndex(i, sessions)));
+					const session = !solo && i > 0 ? sessions[i - 1] : undefined;
+					if (session) this.displayedSessions.set(keys[i].id, session);
+					else this.displayedSessions.delete(keys[i].id);
 				} catch (err) {
 					streamDeck.logger.error(`setImage failed (key ${i}): ${err}`);
 				}
@@ -191,162 +198,22 @@ function orderedKeysOnDevice(actions: Iterable<{ isKey(): boolean }>, deviceId: 
 	return keysByDevice(actions).get(deviceId) ?? [];
 }
 
-type Proc = { pid: number; ppid: number; tty: string; args: string };
-
-/**
- * Enumerate running Claude Code sessions.
- *
- * Topology note (iTerm2): a session is `login → zsh (qterm) → zsh → claude`, where the qterm
- * wrapper allocates a *fresh* pty. So the claude process's own tty is NOT the tty iTerm2 reports
- * for the session. We therefore walk the process ancestry of each claude and pick the first
- * ancestor whose tty matches a real iTerm2 session tty — that's the tab we focus on press.
- */
-async function scanSessions(): Promise<Session[]> {
-	const { stdout: psOut } = await pexec(PS, ["-axo", "pid=,ppid=,tty=,args="]).catch((e) => {
-		streamDeck.logger.error(`ps failed: ${e}`);
-		return { stdout: "" };
-	});
-	const procs = new Map<number, Proc>();
-	const claudePids: number[] = [];
-	for (const line of psOut.split("\n")) {
-		const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
-		if (!m) continue;
-		const pid = parseInt(m[1], 10);
-		const ppid = parseInt(m[2], 10);
-		const tty = m[3];
-		const args = m[4];
-		procs.set(pid, { pid, ppid, tty, args });
-		const first = args.split(/\s+/)[0] ?? "";
-		if (basename(first) === "claude") claudePids.push(pid);
-	}
-	if (claudePids.length === 0) return [];
-
-	const itermSessions = await getItermSessions(); // tty -> { name, processing }
-	const itermTtys = new Set(itermSessions.keys());
-
-	const { stdout: lsofOut } = await pexec(LSOF, ["-a", "-p", claudePids.join(","), "-d", "cwd", "-Fpn"]).catch((e) => {
-		streamDeck.logger.error(`lsof failed: ${e}`);
-		return { stdout: "" };
-	});
-	const cwdByPid = parseLsofCwd(lsofOut);
-
-	const sessions: Session[] = [];
-	for (const pid of claudePids) {
-		const proc = procs.get(pid);
-		if (!proc) continue;
-		const tty = resolveTerminalTty(pid, procs, itermTtys);
-		const cwd = cwdByPid.get(pid) ?? "";
-		const project = cwd ? basename(cwd) : "claude";
-		const iterm = itermSessions.get(tty);
-		// Prefer a non-UUID --resume label; else the (cleaned) iTerm2 tab name; else fall back to pid.
-		const detail = detailFromArgs(proc.args) || cleanTabName(iterm?.name);
-		const status = statusFromTab(iterm);
-		sessions.push({ pid, tty, cwd, project, detail, status });
-	}
-
-	sessions.sort((a, b) => a.project.localeCompare(b.project) || a.pid - b.pid);
-	return sessions;
-}
-
-/** Snapshot for the property inspector: how many Claude sessions, and whether iTerm2 automation works. */
-async function pluginStatus(): Promise<{ sessions: number; itermOk: boolean }> {
+/** The PI only needs iTerm2 automation when CLI sessions are present. */
+async function pluginStatus(): Promise<{ sessions: number; claude: number; codexCli: number; codexDesktop: number; itermOk: boolean; error?: string }> {
 	try {
-		const iterm = await getItermSessions();
 		const sessions = await scanSessions();
-		return { sessions: sessions.length, itermOk: iterm.size > 0 };
+		const cli = sessions.filter((s) => s.source === "cli");
+		const iterm = cli.length ? await getItermSessions() : new Map();
+		return {
+			sessions: sessions.length,
+			claude: sessions.filter((s) => s.provider === "claude").length,
+			codexCli: sessions.filter((s) => s.provider === "codex" && s.source === "cli").length,
+			codexDesktop: sessions.filter((s) => s.source === "desktop").length,
+			itermOk: !cli.length || cli.every((s) => iterm.has(s.tty)),
+		};
 	} catch {
-		return { sessions: 0, itermOk: false };
+		return { sessions: 0, claude: 0, codexCli: 0, codexDesktop: 0, itermOk: false, error: "Session scan failed; check plugin logs." };
 	}
-}
-
-/** Clean an iTerm2 tab name for display: drop leading status glyphs and the trailing " (cmd)". */
-function cleanTabName(name: string | undefined): string {
-	if (!name) return "";
-	return name
-		.replace(/^[^\p{L}\p{N}]+/u, "") // leading spinner/status glyphs
-		.replace(/\s*\(.*$/, "") // trailing " (Python)" / " (claude)" command hint
-		.trim();
-}
-
-function normalizeTty(raw: string): string {
-	if (raw.startsWith("/dev/")) return raw;
-	if (raw.startsWith("tty")) return `/dev/${raw}`;
-	return `/dev/tty${raw}`; // e.g. "s003" -> /dev/ttys003
-}
-
-type ItermSession = { name: string; processing: boolean };
-
-/** Map of iTerm2 session tty -> { tab name, is-processing } for every open session. */
-async function getItermSessions(): Promise<Map<string, ItermSession>> {
-	const SEP = "::SDSEP::";
-	const script = `tell application "iTerm2"
-	set out to ""
-	repeat with w in windows
-		repeat with t in tabs of w
-			repeat with s in sessions of t
-				set out to out & (tty of s) & "${SEP}" & (is processing of s) & "${SEP}" & (name of s) & linefeed
-			end repeat
-		end repeat
-	end repeat
-	return out
-end tell`;
-	const map = new Map<string, ItermSession>();
-	try {
-		const { stdout } = await pexec(OSASCRIPT, ["-e", script]);
-		for (const line of stdout.split("\n")) {
-			const parts = line.split(SEP);
-			if (parts.length < 3) continue;
-			const tty = parts[0].trim();
-			if (!tty) continue;
-			map.set(tty, { processing: parts[1].trim() === "true", name: parts.slice(2).join(SEP).trim() });
-		}
-	} catch (err) {
-		streamDeck.logger.error(`osascript(iTerm2 list) failed: ${err}`);
-	}
-	return map;
-}
-
-/** Infer Claude's state from the leading glyph of the iTerm2 tab title (and output activity). */
-function statusFromTab(iterm: ItermSession | undefined): SessionStatus {
-	if (!iterm) return "idle";
-	const glyph = iterm.name.trimStart().codePointAt(0) ?? 0;
-	if (glyph >= 0x2800 && glyph <= 0x28ff) return "working"; // braille spinner = thinking / running a tool
-	if (glyph === 0x2733) return "waiting"; // ✳ = Claude finished its turn / wants you
-	return iterm.processing ? "working" : "idle";
-}
-
-/** Walk up the process tree from {@link pid}; return the first ancestor tty that iTerm2 owns. */
-function resolveTerminalTty(pid: number, procs: Map<number, Proc>, itermTtys: Set<string>): string {
-	let current = procs.get(pid);
-	const ownTty = current ? normalizeTty(current.tty) : "";
-	for (let hops = 0; current && hops < 12; hops++) {
-		const tty = normalizeTty(current.tty);
-		if (itermTtys.has(tty)) return tty;
-		current = procs.get(current.ppid);
-	}
-	return ownTty; // fallback: focus will simply no-op if this isn't an iTerm2 session
-}
-
-function detailFromArgs(args: string): string {
-	const resume = args.match(/--resume[=\s]+(\S+)/) || args.match(/(?:^|\s)-r[=\s]+(\S+)/);
-	if (resume) {
-		const v = resume[1];
-		// A UUID isn't a useful label — fall through to the iTerm2 tab name instead.
-		if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) return "";
-		return v;
-	}
-	if (/(?:^|\s)--continue\b/.test(args) || /(?:^|\s)-c\b/.test(args)) return "continue";
-	return "";
-}
-
-function parseLsofCwd(out: string): Map<number, string> {
-	const map = new Map<number, string>();
-	let cur = 0;
-	for (const line of out.split("\n")) {
-		if (line.startsWith("p")) cur = parseInt(line.slice(1), 10);
-		else if (line.startsWith("n")) map.set(cur, line.slice(1));
-	}
-	return map;
 }
 
 /** Bring the iTerm2 window/tab/session whose tty matches to the front. Returns false if not found. */
@@ -388,7 +255,7 @@ function truncate(s: string, n: number): string {
 }
 
 const STATUS_THEME: Record<SessionStatus, { color: string; label: string }> = {
-	working: { color: "#f5a623", label: "working" }, // amber — Claude is thinking / running a tool
+	working: { color: "#f5a623", label: "working" }, // amber — an agent turn is in progress
 	waiting: { color: "#2ec27e", label: "your turn" }, // green — finished / asking you / needs a confirm
 	idle: { color: "#6b7280", label: "idle" }, // grey — no recognisable state
 };
@@ -412,6 +279,7 @@ function renderSvg(s: Session | undefined): string {
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 <rect width="${W}" height="${H}" rx="16" fill="#0e1726"/>
 <rect width="${W}" height="11" fill="${theme.color}"/>
+<text x="72" y="32" font-family="${FONT}" font-weight="600" font-size="12" fill="${s.provider === "codex" ? "#8ee3ce" : "#d9a58c"}" text-anchor="middle">${s.provider === "claude" ? "CLAUDE" : s.source === "desktop" ? "CODEX APP" : "CODEX CLI"}</text>
 <text x="72" y="62" font-family="${FONT}" font-weight="700" font-size="24" fill="#ffffff" text-anchor="middle">${proj}</text>
 <text x="72" y="88" font-family="${FONT}" font-size="16" fill="#9fb3cc" text-anchor="middle">${detail}</text>
 <circle cx="40" cy="118" r="6" fill="${theme.color}"/>
@@ -437,7 +305,7 @@ function renderSummary(sessions: Session[]): string {
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 <rect width="${W}" height="${H}" rx="16" fill="#0e1726"/>
 <rect width="${W}" height="11" fill="${accent}"/>
-<text x="72" y="34" font-family="${FONT}" font-weight="700" font-size="20" fill="#ffffff" text-anchor="middle">${sessions.length} Claude</text>
+<text x="72" y="34" font-family="${FONT}" font-weight="700" font-size="20" fill="#ffffff" text-anchor="middle">${sessions.length} sessions</text>
 ${row(60, "working", c.working)}
 ${row(86, "waiting", c.waiting)}
 ${row(112, "idle", c.idle)}

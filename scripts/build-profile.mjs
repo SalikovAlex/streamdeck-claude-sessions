@@ -35,7 +35,7 @@ function slotAction() {
 	return {
 		ActionID: randomUUID().toUpperCase(),
 		LinkedTitle: true,
-		Name: "Claude Session",
+		Name: pluginManifest.Actions[0].Name,
 		Plugin: {
 			Name: pluginManifest.Name,
 			UUID: PLUGIN_UUID,

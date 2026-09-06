@@ -7,9 +7,9 @@
  *   gallery-2-summary.png   1920x960
  *   gallery-3-status.png    1920x960
  *
- * SVG is authored here, rasterised with macOS Quick Look (qlmanage), sized exactly with sips.
+ * SVG is authored here, rasterised with Chrome headless, sized exactly with sips.
  */
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -57,7 +57,7 @@ function keyBody(opts) {
 			`<circle cx="46" cy="${y - 10}" r="11" fill="${color}"/><text x="70" y="${y}" font-family="${FONT}" font-size="33" fill="#cdd9e8">${n} ${label}</text>`;
 		return `<rect width="${W}" height="${W}" rx="34" fill="${PANEL}"/>
 <rect width="${W}" height="22" rx="0" fill="${accent}"/>
-<text x="150" y="74" font-family="${FONT}" font-weight="700" font-size="40" fill="#ffffff" text-anchor="middle">${total} Claude</text>
+<text x="150" y="74" font-family="${FONT}" font-weight="700" font-size="40" fill="#ffffff" text-anchor="middle">${total} sessions</text>
 ${row(126, AMBER, working, "working")}
 ${row(176, GREEN, waiting, "your turn")}
 ${row(226, GREY, idle, "idle")}
@@ -71,16 +71,17 @@ ${row(226, GREY, idle, "idle")}
 				: "";
 		return `<rect width="${W}" height="${W}" rx="34" fill="#1b2433"/>
 <rect width="${W}" height="22" fill="${BLUE}"/>
-<text x="150" y="178" font-family="${FONT}" font-weight="700" font-size="86" fill="#9fc1ee" text-anchor="middle">≡</text>
-<text x="150" y="244" font-family="${FONT}" font-weight="600" font-size="34" fill="#cdd9e8" text-anchor="middle">Summarise</text>
+<text x="150" y="178" font-family="${FONT}" font-weight="700" font-size="86" fill="#9fc1ee" text-anchor="middle">‹</text>
+<text x="150" y="244" font-family="${FONT}" font-weight="600" font-size="34" fill="#cdd9e8" text-anchor="middle">Summary</text>
 ${badge}`;
 	}
 	// session key
-	const { project, label, status } = opts;
+	const { project, label, status, provider = "CLAUDE" } = opts;
 	const color = status === "working" ? AMBER : status === "waiting" ? GREEN : GREY;
 	const statusLabel = status === "working" ? "working" : status === "waiting" ? "your turn" : "idle";
 	return `<rect width="${W}" height="${W}" rx="34" fill="${PANEL}"/>
 <rect width="${W}" height="22" fill="${color}"/>
+<text x="150" y="66" font-family="${FONT}" font-weight="600" font-size="25" fill="${provider === "CLAUDE" ? "#d9a58c" : "#8ee3ce"}" text-anchor="middle">${esc(provider)}</text>
 <text x="150" y="130" font-family="${FONT}" font-weight="700" font-size="50" fill="#ffffff" text-anchor="middle">${esc(trunc(project, 11))}</text>
 <text x="150" y="184" font-family="${FONT}" font-size="33" fill="#9fb3cc" text-anchor="middle">${esc(trunc(label, 14))}</text>
 <circle cx="84" cy="245" r="12" fill="${color}"/>
@@ -108,11 +109,11 @@ const detailKeys = [
 	{ kind: "control", needYou: 4 },
 	{ kind: "session", project: "product", label: "dwh", status: "waiting" },
 	{ kind: "session", project: "product", label: "vision-serverless", status: "working" },
-	{ kind: "session", project: "marketplace", label: "e2eprmkt", status: "waiting" },
-	{ kind: "session", project: "product", label: "Query DWH for…", status: "waiting" },
-	{ kind: "session", project: "skypilot", label: "tenants", status: "working" },
-	{ kind: "session", project: "product", label: "web analytics", status: "waiting" },
-	{ kind: "session", project: "product", label: "Commit & push", status: "waiting" },
+	{ kind: "session", provider: "CODEX CLI", project: "marketplace", label: "release", status: "waiting" },
+	{ kind: "session", provider: "CODEX APP", project: "product", label: "Review API", status: "waiting" },
+	{ kind: "session", provider: "CODEX APP", project: "skypilot", label: "Add tests", status: "working" },
+	{ kind: "session", provider: "CODEX CLI", project: "product", label: "web analytics", status: "waiting" },
+	{ kind: "session", project: "product", label: "Ready", status: "idle" },
 ];
 const summaryKeys = [
 	{ kind: "summary", working: 2, waiting: 4, idle: 1 },
@@ -137,35 +138,35 @@ const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="288" height="288
 // ---- THUMBNAIL 1920x960: logo + title + subtitle + a row of sample keys ----
 const thumbInner2 = `
 <g transform="translate(120,116) scale(0.5)">${logoMark()}</g>
-${title(1920, 258, "Claude Sessions", 112)}
-${title(1920, 330, "See & switch your Claude Code sessions — right from the Stream Deck +", 40, "#9fb3cc", 500)}
-${title(1920, 380, "Unofficial · macOS + iTerm2", 30, "#5f7a99", 500)}
+${title(1920, 258, "Claude & Codex Sessions", 88)}
+${title(1920, 330, "Claude Code + Codex CLI + Codex desktop — on your Stream Deck +", 38, "#9fb3cc", 500)}
+${title(1920, 380, "Unofficial · macOS · iTerm2 for CLI sessions", 30, "#5f7a99", 500)}
 <g transform="translate(437,470)">
 ${keyAt(0, 0, 0.66, { kind: "summary", working: 2, waiting: 4, idle: 1 })}
 ${keyAt(214, 0, 0.66, { kind: "session", project: "product", label: "dwh", status: "waiting" })}
-${keyAt(428, 0, 0.66, { kind: "session", project: "skypilot", label: "tenants", status: "working" })}
-${keyAt(642, 0, 0.66, { kind: "session", project: "marketplace", label: "e2eprmkt", status: "waiting" })}
+${keyAt(428, 0, 0.66, { kind: "session", provider: "CODEX APP", project: "skypilot", label: "Add tests", status: "working" })}
+${keyAt(642, 0, 0.66, { kind: "session", provider: "CODEX CLI", project: "marketplace", label: "release", status: "waiting" })}
 ${keyAt(856, 0, 0.66, { kind: "control", needYou: 4 })}
 </g>`;
 
 // ---- GALLERY 1: detail view ----
-const g1 = `${title(1920, 110, "Every session — one press to its iTerm2 tab", 56)}
+const g1 = `${title(1920, 110, "Claude + Codex — one key per session", 56)}
 ${deck(324, 200, 0.95, detailKeys)}`;
 
 // ---- GALLERY 2: summary view ----
 const g2 = `${title(1920, 110, "Summary at a glance — tap to expand", 56)}
 ${deck(324, 200, 0.95, summaryKeys)}
-${title(1920, 880, "One key toggles summary ⇄ all sessions", 34, "#9fb3cc", 500)}`;
+${title(1920, 880, "Tap the summary to open the deck; tap ‹ Summary to return", 34, "#9fb3cc", 500)}`;
 
 // ---- GALLERY 3: status legend ----
 const g3 = `${title(1920, 130, "Live status for every session", 60)}
 <g transform="translate(360,260)">
 ${keyAt(0, 0, 1.15, { kind: "session", project: "product", label: "thinking…", status: "working" })}
-${keyAt(420, 0, 1.15, { kind: "session", project: "dwh", label: "asks you", status: "waiting" })}
-${keyAt(840, 0, 1.15, { kind: "session", project: "idle one", label: "—", status: "idle" })}
+${keyAt(420, 0, 1.15, { kind: "session", provider: "CODEX APP", project: "dwh", label: "turn complete", status: "waiting" })}
+${keyAt(840, 0, 1.15, { kind: "session", provider: "CODEX CLI", project: "idle one", label: "—", status: "idle" })}
 </g>
-${title(1920, 800, "amber = working   ·   green = your turn (question / done)   ·   grey = idle", 36, "#9fb3cc", 500)}
-${title(1920, 858, "Press a key to jump straight to that Claude session", 34, "#7f93ad", 500)}`;
+${title(1920, 800, "amber = working   ·   green = your turn   ·   grey = idle / unknown", 36, "#9fb3cc", 500)}
+${title(1920, 858, "Codex approval prompts may show working until the turn ends", 34, "#7f93ad", 500)}`;
 
 // ---- render helper (Chrome headless — honours SVG text-anchor, gradients, fonts) ----
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -175,21 +176,21 @@ function render(name, svg, w, h) {
 	const htmlPath = path.join(tmp, "a.html");
 	fs.writeFileSync(htmlPath, html);
 	const outPath = path.join(OUT, name);
+	const screenshot = path.join(tmp, "render.png");
 	try {
-		execSync(
-			`"${CHROME}" --headless=new --disable-gpu --no-sandbox --disable-dev-shm-usage --no-first-run --hide-scrollbars ` +
-				`--force-device-scale-factor=1 --virtual-time-budget=3000 --user-data-dir="${tmp}/cd" ` +
-				`--window-size=${w},${h} --screenshot="${outPath}" "file://${htmlPath}"`,
-			{ stdio: "ignore", timeout: 15000, killSignal: "SIGKILL" },
-		);
+		execFileSync(CHROME, [
+			"--headless=new", "--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage", "--no-first-run", "--hide-scrollbars",
+			"--force-device-scale-factor=1", "--virtual-time-budget=3000", `--user-data-dir=${tmp}/cd`,
+			`--window-size=${w},${h}`, `--screenshot=${screenshot}`, `file://${htmlPath}`,
+		], { stdio: "ignore", timeout: 15000, killSignal: "SIGKILL" });
 	} catch {
-		// Chrome occasionally doesn't exit after --screenshot; the PNG is written regardless.
+		// Chrome occasionally does not exit after the shot. Accept only a newly written PNG.
 	}
-	if (!fs.existsSync(outPath)) throw new Error(`chrome failed for ${name}`);
-	// guarantee exact dimensions
-	execSync(`sips -z ${h} ${w} "${outPath}"`, { stdio: "ignore" });
+	if (!fs.existsSync(screenshot)) throw new Error(`chrome failed for ${name}`);
+	execFileSync("/usr/bin/sips", ["-z", String(h), String(w), screenshot], { stdio: "ignore" });
+	fs.copyFileSync(screenshot, outPath);
 	fs.rmSync(tmp, { recursive: true, force: true });
-	const dims = execSync(`sips -g pixelWidth -g pixelHeight "${outPath}"`).toString().match(/\d+/g);
+	const dims = execFileSync("/usr/bin/sips", ["-g", "pixelWidth", "-g", "pixelHeight", outPath]).toString().match(/\d+/g);
 	console.log(`  ${name}  ${dims?.slice(-2).join("x")}`);
 }
 
