@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — 2026-09-06
+
+- Updated the bundled `ws` runtime dependency to address the memory-exhaustion denial-of-service advisory reported by GitHub.
+- Includes all Claude and Codex support from 0.2.0.
+
 ## 0.2.0 — 2026-09-06
 
 - Added support for Codex CLI and loaded local Codex desktop tasks alongside Claude Code.

@@ -16,8 +16,9 @@ Requires macOS 12+, Stream Deck 6.9+, and Stream Deck +. CLI navigation requires
 
 Unofficial community plugin. Not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is an OpenAI product.
 
-## Version 0.2.0 release notes
+## Version 0.2.1 release notes
 
+- Updated the bundled WebSocket dependency to address a denial-of-service vulnerability.
 - Added Codex CLI sessions and loaded local Codex desktop tasks alongside Claude Code.
 - Added agent labels, desktop task navigation, and per-agent counts in the Info panel.
 - Preserved existing keys and the bundled Claude Sessions profile.
@@ -26,7 +27,7 @@ Unofficial community plugin. Not affiliated with or endorsed by Anthropic or Ope
 
 ## Upload files
 
-- Plugin: `com.salikov.claude-sessions.streamDeckPlugin` (version 0.2.0.0).
+- Plugin: `com.salikov.claude-sessions.streamDeckPlugin` (version 0.2.1.0).
 - Icon: `marketplace/icon.png` (288 × 288).
 - Thumbnail: `marketplace/thumbnail.png` (1920 × 960).
 - Gallery: `marketplace/gallery-1-detail.png`, `marketplace/gallery-2-summary.png`, `marketplace/gallery-3-status.png` (1920 × 960 each).

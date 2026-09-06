@@ -1,6 +1,6 @@
 {
 	"name": "streamdeck-claude-sessions",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "Stream Deck + sessions for Claude Code, Codex CLI, and the Codex desktop app.",
 	"author": "Alexander Salikov",
 	"scripts": {
