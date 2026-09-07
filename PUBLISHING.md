@@ -53,6 +53,9 @@ The listing must describe macOS and Stream Deck + requirements, iTerm2/Automatio
 The source repository is currently private. Its URL returns 404 to unauthenticated users, so `streamdeck validate` reports a URL warning. Do not change repository visibility as part of a release without explicit authorization. Preserve the existing Marketplace support destination unless the owner provides a replacement.
 
 ### Submit
+
+The manifest `Name` must remain `Claude Sessions`, matching the locked name of the existing Marketplace product. Keep `Category` aligned with it for validation; the description and images describe Claude and Codex support. A name mismatch disables submission. Only one pending version is allowed; an older pending submission must be resolved before creating a new version.
+
 1. `streamdeck pack com.salikov.claude-sessions.sdPlugin --force`
 2. Sign in to the [Maker Console](https://maker.elgato.com/) and open the existing product; create a version update instead of a duplicate listing.
 3. Upload the `.streamDeckPlugin`, add the version notes, and update listing copy/assets as needed.

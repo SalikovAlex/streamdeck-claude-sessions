@@ -75,7 +75,7 @@ Dev mode must be enabled once: `streamdeck dev`.
 
 ## Non-obvious gotchas (do not regress these)
 
-- **Compatibility.** Keep both UUIDs and the bundled profile name `Claude Sessions` unchanged. The display name is `Claude & Codex Sessions`; the action is `Agent Session`.
+- **Compatibility.** Keep both UUIDs, the manifest `Name`/`Category`, and the bundled profile name `Claude Sessions` unchanged. Marketplace uploads require the manifest name to match the locked product name. The action is `Agent Session`; descriptions and keys identify Claude and Codex support.
 - **Codex desktop.** Local loaded tasks only, no remote/cloud/VS Code catalog. Internal SQLite/rollout schemas may change. Discover the home from process-owned files, support missing databases and partial writes, and keep reads bounded/read-only. Desktop-only use must not request iTerm2 Automation.
 - **Identity.** Key presses use the displayed session ID and revalidate that it still exists, rather than selecting the current array index after reordering. Poll/PI/press scans share an in-flight promise; refreshes do not overlap.
 

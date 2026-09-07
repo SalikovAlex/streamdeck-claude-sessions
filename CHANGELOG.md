@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 — 2026-09-07
+
+- Restored the manifest name `Claude Sessions` to match the existing Marketplace product, as required by Elgato's upload validation.
+- Matched the category to the product name for validation. Retained agent labels and all Codex CLI and desktop support from 0.2.1.
+
 ## 0.2.1 — 2026-09-06
 
 - Updated the bundled `ws` runtime dependency to address the memory-exhaustion denial-of-service advisory reported by GitHub.

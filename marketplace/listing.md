@@ -1,5 +1,7 @@
 # Claude & Codex Sessions
 
+Marketplace product name: **Claude Sessions** (locked). The manifest must use this exact name for uploads.
+
 ## Short description
 
 See Claude Code and Codex sessions on your Stream Deck +. Press a key to open the matching terminal tab or desktop task.
@@ -16,8 +18,9 @@ Requires macOS 12+, Stream Deck 6.9+, and Stream Deck +. CLI navigation requires
 
 Unofficial community plugin. Not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is an OpenAI product.
 
-## Version 0.2.1 release notes
+## Version 0.2.2 release notes
 
+- Retained the existing Marketplace product name for update compatibility.
 - Updated the bundled WebSocket dependency to address a denial-of-service vulnerability.
 - Added Codex CLI sessions and loaded local Codex desktop tasks alongside Claude Code.
 - Added agent labels, desktop task navigation, and per-agent counts in the Info panel.
@@ -27,7 +30,7 @@ Unofficial community plugin. Not affiliated with or endorsed by Anthropic or Ope
 
 ## Upload files
 
-- Plugin: `com.salikov.claude-sessions.streamDeckPlugin` (version 0.2.1.0).
+- Plugin: `com.salikov.claude-sessions.streamDeckPlugin` (version 0.2.2.0).
 - Icon: `marketplace/icon.png` (288 × 288).
 - Thumbnail: `marketplace/thumbnail.png` (1920 × 960).
 - Gallery: `marketplace/gallery-1-detail.png`, `marketplace/gallery-2-summary.png`, `marketplace/gallery-3-status.png` (1920 × 960 each).

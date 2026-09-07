@@ -1,6 +1,6 @@
 {
-	"Name": "Claude & Codex Sessions",
-	"Version": "0.2.1.0",
+	"Name": "Claude Sessions",
+	"Version": "0.2.2.0",
 	"Author": "Alexander Salikov",
 	"Actions": [
 		{
@@ -21,7 +21,7 @@
 			]
 		}
 	],
-	"Category": "Claude & Codex Sessions",
+	"Category": "Claude Sessions",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
 	"Description": "Shows Claude Code and Codex CLI sessions plus loaded Codex desktop tasks with live status. Press to open the matching iTerm2 tab or Codex task. macOS only; CLI navigation requires iTerm2.",
