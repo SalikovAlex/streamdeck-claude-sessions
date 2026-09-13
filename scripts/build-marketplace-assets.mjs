@@ -57,11 +57,10 @@ function keyBody(opts) {
 			`<circle cx="46" cy="${y - 10}" r="11" fill="${color}"/><text x="70" y="${y}" font-family="${FONT}" font-size="33" fill="#cdd9e8">${n} ${label}</text>`;
 		return `<rect width="${W}" height="${W}" rx="34" fill="${PANEL}"/>
 <rect width="${W}" height="22" rx="0" fill="${accent}"/>
-<text x="150" y="74" font-family="${FONT}" font-weight="700" font-size="40" fill="#ffffff" text-anchor="middle">${total} Claude</text>
-${row(126, AMBER, working, "working")}
-${row(176, GREEN, waiting, "your turn")}
-${row(226, GREY, idle, "idle")}
-<text x="150" y="276" font-family="${FONT}" font-weight="600" font-size="26" fill="#6f9bd6" text-anchor="middle">▸ show all</text>`;
+<text x="150" y="80" font-family="${FONT}" font-weight="700" font-size="40" fill="#ffffff" text-anchor="middle">${total} Claude</text>
+${row(140, AMBER, working, "working")}
+${row(192, GREEN, waiting, "your turn")}
+${row(244, GREY, idle, "idle")}`;
 	}
 	if (kind === "control") {
 		const { needYou } = opts;
@@ -71,8 +70,8 @@ ${row(226, GREY, idle, "idle")}
 				: "";
 		return `<rect width="${W}" height="${W}" rx="34" fill="#1b2433"/>
 <rect width="${W}" height="22" fill="${BLUE}"/>
-<text x="150" y="178" font-family="${FONT}" font-weight="700" font-size="86" fill="#9fc1ee" text-anchor="middle">≡</text>
-<text x="150" y="244" font-family="${FONT}" font-weight="600" font-size="34" fill="#cdd9e8" text-anchor="middle">Summarise</text>
+<text x="150" y="186" font-family="${FONT}" font-weight="700" font-size="120" fill="#9fc1ee" text-anchor="middle">‹</text>
+<text x="150" y="248" font-family="${FONT}" font-weight="600" font-size="34" fill="#cdd9e8" text-anchor="middle">Summary</text>
 ${badge}`;
 	}
 	// session key
@@ -138,24 +137,24 @@ const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="288" height="288
 const thumbInner2 = `
 <g transform="translate(120,116) scale(0.5)">${logoMark()}</g>
 ${title(1920, 258, "Claude Sessions", 112)}
-${title(1920, 330, "See & switch your Claude Code sessions — right from the Stream Deck +", 40, "#9fb3cc", 500)}
+${title(1920, 330, "See & switch your Claude Code sessions — right from the Stream Deck", 40, "#9fb3cc", 500)}
 ${title(1920, 380, "Unofficial · macOS + iTerm2", 30, "#5f7a99", 500)}
 <g transform="translate(437,470)">
-${keyAt(0, 0, 0.66, { kind: "summary", working: 2, waiting: 4, idle: 1 })}
+${keyAt(0, 0, 0.66, { kind: "control", needYou: 4 })}
 ${keyAt(214, 0, 0.66, { kind: "session", project: "product", label: "dwh", status: "waiting" })}
 ${keyAt(428, 0, 0.66, { kind: "session", project: "skypilot", label: "tenants", status: "working" })}
 ${keyAt(642, 0, 0.66, { kind: "session", project: "marketplace", label: "e2eprmkt", status: "waiting" })}
-${keyAt(856, 0, 0.66, { kind: "control", needYou: 4 })}
+${keyAt(856, 0, 0.66, { kind: "session", project: "claude-sessions", label: "Stream Deck", status: "working" })}
 </g>`;
 
 // ---- GALLERY 1: detail view ----
 const g1 = `${title(1920, 110, "Every session — one press to its iTerm2 tab", 56)}
 ${deck(324, 200, 0.95, detailKeys)}`;
 
-// ---- GALLERY 2: summary view ----
-const g2 = `${title(1920, 110, "Summary at a glance — tap to expand", 56)}
+// ---- GALLERY 2: summary view (lone key on any profile) ----
+const g2 = `${title(1920, 110, "Aggregated summary on a lone key", 56)}
 ${deck(324, 200, 0.95, summaryKeys)}
-${title(1920, 880, "One key toggles summary ⇄ all sessions", 34, "#9fb3cc", 500)}`;
+${title(1920, 880, "Tap to open the bundled Claude Sessions deck", 34, "#9fb3cc", 500)}`;
 
 // ---- GALLERY 3: status legend ----
 const g3 = `${title(1920, 130, "Live status for every session", 60)}

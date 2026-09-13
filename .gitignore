@@ -16,3 +16,13 @@ com.salikov.claude-sessions.sdPlugin/*.streamDeckProfile
 # scratch
 .profile-build/
 .DS_Store
+
+# local credentials and editor recovery files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.swp
+*.swo
+*~

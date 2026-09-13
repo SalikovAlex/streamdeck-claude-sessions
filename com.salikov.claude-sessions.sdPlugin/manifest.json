@@ -1,6 +1,6 @@
 {
 	"Name": "Claude Sessions",
-	"Version": "0.1.1.0",
+	"Version": "0.1.3.0",
 	"Author": "Alexander Salikov",
 	"Actions": [
 		{
@@ -24,7 +24,7 @@
 	"Category": "Claude Sessions",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
-	"Description": "Shows your running Claude Code (CLI) sessions on the keys with live status, and jumps to the matching iTerm2 tab when pressed. macOS + iTerm2 only.",
+	"Description": "See and switch between your running Claude Code (CLI) sessions from the Stream Deck. Each key shows one session (project name + live status: working / your turn / idle); press it to jump straight to that session's iTerm2 tab. A summary key aggregates how many sessions need attention. Includes a bundled 8-key profile for Stream Deck +, a Property Inspector showing connection status, and on-device colour-coded status bars. macOS + iTerm2 only; reads local processes only, sends nothing off-machine. Unofficial — not affiliated with Anthropic.",
 	"URL": "https://github.com/SalikovAlex/streamdeck-claude-sessions",
 	"Icon": "imgs/plugin/icon",
 	"SDKVersion": 3,

@@ -25,7 +25,7 @@ const PROFILE_NAME = "Claude Sessions";
 const ACTION_UUID = "com.salikov.claude-sessions.slot";
 const PLUGIN_UUID = "com.salikov.claude-sessions";
 
-// The user's actual Stream Deck + (copied verbatim from their existing SD+ profile).
+// Stream Deck + model identifier; an empty UUID lets the importer target the user's device.
 const DEVICE = { Model: "20GBD9901", UUID: "" };
 // Stream Deck +: 4 columns x 2 rows of keys.
 const COLS = 4;
