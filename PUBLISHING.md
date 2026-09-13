@@ -4,13 +4,15 @@ Two channels: **GitHub** (source + releases) and the **Elgato Marketplace** (one
 
 ---
 
-## 1. GitHub (open source)
+## 1. GitHub releases
 
 The repo is MIT-licensed and self-contained.
 
 **Release flow:**
 ```sh
 npm ci
+npm test
+npm run typecheck
 npm run build
 node scripts/build-profile.mjs
 bash scripts/build-icons.sh            # regenerate icons (optional; committed already)
@@ -24,7 +26,7 @@ Tag releases to match the manifest `Version` (e.g. `v0.1.0`).
 
 ## 2. Elgato Marketplace
 
-Portal: <https://marketplace.elgato.com/maker> (sign in with an Elgato/Maker account).
+Portal: <https://maker.elgato.com/> (sign in with an Elgato/Maker account).
 
 ### Manifest readiness (done in this repo)
 - [x] `Name`, `Author`, `Version` (`{major}.{minor}.{patch}.{build}`), `UUID` (reverse-DNS)
@@ -46,91 +48,25 @@ Follow the exact dimensions the portal shows at upload time. Typically you provi
 - [ ] **Category** + tags
 - [ ] Support / homepage URL (the GitHub repo)
 
-### Draft listing copy
-- **Name:** Claude Sessions *(see trademark note — consider "Claude Code Session Switcher (unofficial)")*
-- **Tagline:** See and switch between your running Claude Code sessions from the Stream Deck.
+### Listing copy and disclosures
 
-- **Long description (Markdown):**
+Use [marketplace/listing.md](marketplace/listing.md) for the current name, descriptions, version notes, and asset paths. Regenerate screenshots with `node scripts/build-marketplace-assets.mjs` when the key layout or provider labels change, and visually inspect every generated image.
 
-  > **Claude Sessions** turns your Stream Deck into a live dashboard for your running Claude Code
-  > (CLI) sessions on macOS. Each key represents one session and updates every ~2 seconds.
-  >
-  > **What you see on a key**
-  > - **Project name** — derived from the session's working directory.
-  > - **Live status bar** — colour-coded:
-  >   - 🟠 **Working** — Claude is thinking or running a tool.
-  >   - 🟢 **Your turn** — Claude finished or is asking you to confirm something.
-  >   - ⚫ **Idle** — session is open but quiet.
-  > - **Status dot + label** — same signal, larger, so it's readable at a glance.
-  >
-  > **What pressing a key does**
-  > - **A session key** — focuses the matching iTerm2 window/tab so you can keep typing
-  >   without alt-tabbing.
-  > - **The first key on the deck (summary card)** — returns to your previous Stream Deck
-  >   profile when you're done.
-  > - **A lone Claude Sessions key on any profile** — shows an aggregated summary
-  >   ("3 sessions, 1 needs you") and, when tapped, opens the dedicated 8-key Claude Sessions
-  >   profile.
-  >
-  > **What's included**
-  > - The plugin itself (Node.js 20, Stream Deck SDK 3, MIT-licensed).
-  > - A bundled **Claude Sessions** profile for Stream Deck + (4×2 keys, one summary key
-  >   + seven session slots) that auto-installs on first run.
-  > - A Property Inspector showing the plugin version, live connection status, and a hint
-  >   about the required Automation permission.
-  >
-  > **How it works (locally, no network)**
-  > - Scans your running processes for `claude` (the Claude Code CLI).
-  > - Walks each process's parent chain to find the owning iTerm2 tab.
-  > - Reads each tab's title to detect status (Braille spinner = working, ✳ = waiting).
-  > - All of this happens on your Mac — nothing is sent off-machine.
-  >
-  > **Requirements**
-  > - **macOS** (Apple Silicon or Intel) — Linux/Windows not supported.
-  > - **iTerm2** — the terminal-focusing logic uses iTerm2's AppleScript API.
-  > - **Stream Deck 6.9+** with the Claude Code CLI installed and running in iTerm2.
-  > - On first launch macOS will ask permission for Stream Deck to control iTerm
-  >   (System Settings → Privacy & Security → Automation → Stream Deck → iTerm).
-  >   Without this, the plugin shows "Enable Automation" in the Property Inspector and
-  >   key presses won't focus tabs.
-  >
-  > **Limitations**
-  > - macOS + iTerm2 only.
-  > - Best on Stream Deck + (the bundled profile fits its 4×2 keypad); also works on
-  >   other Stream Deck devices as individual keys.
-  > - "Status" is inferred from the terminal tab title — if you've heavily customised
-  >   the Claude prompt, detection may degrade.
-  >
-  > **Unofficial.** Not affiliated with, sponsored by, or endorsed by Anthropic.
-  > "Claude" and "Claude Code" are trademarks of Anthropic. Source + issues:
-  > <https://github.com/SalikovAlex/streamdeck-claude-sessions>.
+The listing must describe macOS and Stream Deck + requirements, iTerm2/Automation requirements for CLI navigation, local-only Codex desktop coverage, approximate Codex approval status, and the unofficial status of the plugin. Keep the generic terminal icon; do not imply endorsement by Anthropic or OpenAI.
 
-### Must disclose in the listing (and gate review)
-- [ ] **macOS only**, **iTerm2 only**, designed for **Stream Deck +** (2×4 keys).
-- [ ] Requires granting **Automation** permission (Stream Deck → iTerm) on first use.
-- [ ] Reads the running `claude` processes + iTerm2 tab titles locally; sends nothing off-machine.
-
-### ⚠️ Trademark — read before submitting
-"Claude" and "Claude Code" are trademarks of **Anthropic**. This is an **unofficial, community** plugin
-with no affiliation or endorsement. Before a public listing:
-- Consider a descriptive, clearly-unofficial name (e.g. *"Session Switcher for Claude Code (unofficial)"*).
-- Add an "unofficial / not affiliated with Anthropic" disclaimer to the listing and README.
-- The icon uses generic terminal artwork (no Anthropic logo) — keep it that way.
-- Elgato review may ask for permission/justification to use a third-party brand name. Be ready to rename.
+The public source and support URL is https://github.com/SalikovAlex/streamdeck-claude-sessions. Verify that it is reachable when validating a release.
 
 ### Submit
-1. `streamdeck pack com.salikov.claude-sessions.sdPlugin --force`
-2. Upload the `.streamDeckPlugin` in the Maker portal, fill the listing, attach assets.
-3. **Demo video (required by Elgato review).** Plugins that need hardware must ship a short video proving
-   functionality, emailed to <maker@elgato.com> (reply to the review thread). Suggested 60–90 s screen recording
-   (QuickTime → New Screen Recording, plus a phone shot of the physical Stream Deck if possible):
-   1. Stream Deck app: the **Claude Sessions** category and action in the action list (white icons visible).
-   2. Two or three `claude` sessions running in iTerm2 tabs; the keys show project names + status bars.
-   3. Send a prompt in one tab → its key turns **working** (amber); when it finishes → **your turn** (green).
-   4. Press a session key → iTerm2 focuses that tab. Press the summary key → returns to the previous profile.
-   5. Property Inspector showing plugin version + connection status.
-4. Submit for review; address any feedback; publish.
 
-### Review history
-- **v0.1.1 / v0.1.2 — rejected:** category + action icons must be white (they were colour in 0.1.1 and a solid
-  white square in 0.1.2 due to the qlmanage alpha bug); demo video requested. Fixed in **v0.1.3** (SVG icons).
+The manifest `Name` must remain `Claude Sessions`, matching the locked name of the existing Marketplace product. Keep `Category` aligned with it for validation; the description and images describe Claude and Codex support. A name mismatch disables submission. Only one pending version is allowed; an older pending submission must be resolved before creating a new version.
+
+1. `streamdeck pack com.salikov.claude-sessions.sdPlugin --force`
+2. Sign in to the [Maker Console](https://maker.elgato.com/) and open the existing product; create a version update instead of a duplicate listing.
+3. Upload the `.streamDeckPlugin`, add the version notes, and update listing copy/assets as needed.
+4. Submit for review and verify the resulting status. Upload, review submission, and Marketplace publication are distinct states; report the state the portal actually confirms.
+
+Current official workflow: [Managing Products](https://docs.elgato.com/maker-console/managing-products).
+
+### Demo and icon review notes
+
+Elgato previously requested a demonstration video and white-on-transparent in-app icons. The SVG category and action icons preserve transparency. Before Marketplace submission, verify the icons in the app and record session status changes, key navigation, summary navigation, and the Property Inspector.
