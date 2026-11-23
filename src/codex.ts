@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { open, readdir } from "node:fs/promises";
+import { access, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { UUID, type SessionStatus } from "./sessions";
@@ -10,6 +10,19 @@ const READ_LIMIT = 256 * 1024;
 const hasNameColumn = new Map<string, boolean>();
 
 export type CodexReference = { id: string; home: string; rollout?: string };
+const ID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+// Newer Codex splits long tasks into segments: rollout-<time>-<taskId>_<segmentId>.jsonl.
+const ROLLOUT = new RegExp(`^(.*)/sessions/.*/rollout-.*?-(${ID})(?:_(${ID}))?\\.jsonl$`, "i");
+
+/** Turn-history keys for a task: its ID, plus segment IDs that newer turns are stored under. */
+function turnKeys(id: string, rollouts: (string | undefined)[]): string[] {
+	const keys = new Set([id]);
+	for (const path of rollouts) {
+		const match = path?.match(ROLLOUT);
+		if (match?.[2] === id && match[3]) keys.add(match[3]);
+	}
+	return [...keys];
+}
 export type CodexThread = { id: string; cwd: string; title: string; status?: SessionStatus };
 type Metadata = { id: string; cwd: string; title: string; source: unknown; archived?: number; rollout_path?: string };
 
@@ -18,7 +31,7 @@ export function codexReferences(files: string[]): CodexReference[] {
 	const refs = new Map<string, CodexReference>();
 	for (const file of files) {
 		const lock = file.match(/^(.*)\/thread-writer-locks\/([^/]+)\.lock$/);
-		const rollout = file.match(/^(.*)\/sessions\/.*\/rollout-[^/]*-([0-9a-f-]{36})\.jsonl$/i);
+		const rollout = file.match(ROLLOUT);
 		const match = lock ?? rollout;
 		if (!match || !UUID.test(match[2])) continue;
 		const key = `${match[1]}/${match[2]}`;
@@ -32,7 +45,17 @@ function sqlString(value: string): string { return `'${value.replace(/'/g, "''")
 
 async function query<T>(database: string, sql: string): Promise<T[]> {
 	// -readonly prevents creating or changing Codex databases. Bound duration and output per poll.
-	const { stdout } = await pexec(SQLITE, ["-readonly", "-json", "-cmd", ".timeout 200", database, sql], { timeout: 1200, maxBuffer: 2 * 1024 * 1024 });
+	const run = (target: string) => pexec(SQLITE, ["-readonly", "-json", "-cmd", ".timeout 200", target, sql], { timeout: 1200, maxBuffer: 2 * 1024 * 1024 });
+	let stdout: string;
+	try { ({ stdout } = await run(database)); }
+	catch (err) {
+		// A WAL database whose -wal/-shm files Codex removed on close cannot be opened read-only.
+		// With no WAL present, immutable mode reads the same committed data without creating any file.
+		if (!/unable to open database file/.test(String(err))) throw err;
+		try { await access(`${database}-wal`); throw err; } catch (missing) { if (missing === err) throw err; }
+		const uri = `file:${encodeURI(database).replace(/\?/g, "%3F").replace(/#/g, "%23")}?mode=ro&immutable=1`;
+		({ stdout } = await run(uri));
+	}
 	return stdout.trim() ? JSON.parse(stdout) as T[] : [];
 }
 
@@ -106,6 +129,28 @@ async function readRollout(path: string): Promise<{ metadata?: Metadata; status?
 	} finally { await file.close(); }
 }
 
+/** Task IDs that an active scheduled automation (heartbeat) posts into. Reads two keys from small TOML files. */
+async function automationTargets(home: string): Promise<Set<string>> {
+	const targets = new Set<string>();
+	let names: string[];
+	try { names = await readdir(join(home, "automations")); } catch { return targets; }
+	await Promise.all(names.slice(0, 200).map(async (name) => {
+		try {
+			const file = await open(join(home, "automations", name, "automation.toml"), "r");
+			let text: string;
+			try {
+				const buffer = Buffer.alloc(64 * 1024);
+				const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+				text = buffer.subarray(0, bytesRead).toString("utf8");
+			} finally { await file.close(); }
+			const target = text.match(/^target_thread_id\s*=\s*"([^"]+)"/m)?.[1];
+			const status = text.match(/^status\s*=\s*"([^"]+)"/m)?.[1];
+			if (target && UUID.test(target) && (!status || status.toUpperCase() === "ACTIVE")) targets.add(target.toLowerCase());
+		} catch { /* not an automation directory */ }
+	}));
+	return targets;
+}
+
 /** Read metadata/status for known live IDs. Failures are isolated by home and by task. */
 export async function readCodexThreads(refs: CodexReference[], report: (message: string) => void = () => {}): Promise<Map<string, CodexThread>> {
 	const result = new Map<string, CodexThread>();
@@ -132,15 +177,37 @@ export async function readCodexThreads(refs: CodexReference[], report: (message:
 		try {
 			const history = await newestDatabase(home, "thread_history");
 			if (history) {
-				const rows = await query<{ thread_id: string; status: string }>(history, `SELECT t.thread_id,t.status FROM thread_turns t WHERE t.thread_id IN (${list}) AND t.rollout_ordinal=(SELECT MAX(u.rollout_ordinal) FROM thread_turns u WHERE u.thread_id=t.thread_id)`);
-				for (const row of rows) { const status = turnStatus(row.status); if (status) statuses.set(row.thread_id, status); }
+				// Ordinals continue across segments, so the highest ordinal over all of a task's keys is its latest turn.
+				const owner = new Map<string, string>();
+				for (const ref of homeRefs) for (const key of turnKeys(ref.id, [ref.rollout, metadata.get(ref.id)?.rollout_path])) owner.set(key, ref.id);
+				const keys = [...owner.keys()].map(sqlString).join(",");
+				const rows = await query<{ thread_id: string; status: string; rollout_ordinal: number }>(history, `SELECT t.thread_id,t.status,t.rollout_ordinal FROM thread_turns t WHERE t.thread_id IN (${keys}) AND t.rollout_ordinal=(SELECT MAX(u.rollout_ordinal) FROM thread_turns u WHERE u.thread_id=t.thread_id)`);
+				const latest = new Map<string, number>();
+				for (const row of rows) {
+					const id = owner.get(row.thread_id);
+					const status = turnStatus(row.status);
+					if (!id || !status || (latest.get(id) ?? -Infinity) > row.rollout_ordinal) continue;
+					latest.set(id, row.rollout_ordinal);
+					statuses.set(id, status);
+				}
 			}
 		} catch (err) { report(`Codex turn status unavailable: ${err}`); }
+		const read = new Set<string>();
+		try {
+			// The desktop app records what you have seen; a finished turn you already read is not "your turn".
+			const database = await newestDatabase(home, "state");
+			if (database && (await query(database, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='thread_read_receipts'")).length) {
+				const rows = await query<{ thread_id: string; first_unread_turn: string | null }>(database, `SELECT thread_id,first_unread_turn FROM thread_read_receipts WHERE thread_id IN (${list})`);
+				for (const row of rows) if (!row.first_unread_turn) read.add(row.thread_id);
+			}
+		} catch (err) { report(`Codex read receipts unavailable: ${err}`); }
+		const scheduled = await automationTargets(home);
 		await Promise.all(homeRefs.map(async (ref) => {
 			let meta = metadata.get(ref.id);
 			if (meta?.archived || isSubagent(meta?.source)) return;
 			let status = statuses.get(ref.id);
-			const rollout = ref.rollout ?? meta?.rollout_path;
+			// Prefer the task's current segment; a process may still hold an older one open.
+			const rollout = meta?.rollout_path || ref.rollout;
 			if (rollout && (!meta || !status)) {
 				try {
 					const data = await readRollout(rollout);
@@ -149,6 +216,8 @@ export async function readCodexThreads(refs: CodexReference[], report: (message:
 				} catch (err) { report(`Codex session ${ref.id} unavailable: ${err}`); }
 			}
 			if (!meta || meta.id !== ref.id || isSubagent(meta.source)) return;
+			// Scheduled runs and results you have already read do not need you.
+			if (status === "waiting" && (read.has(ref.id) || scheduled.has(ref.id.toLowerCase()))) status = "idle";
 			result.set(ref.id, { id: ref.id, cwd: meta.cwd, title: meta.title, status });
 		}));
 	}));

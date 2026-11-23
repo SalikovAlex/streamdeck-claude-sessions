@@ -51,6 +51,8 @@ streamdeck pack com.salikov.claude-sessions.sdPlugin --force   # -> .streamDeckP
 
 node scripts/build-profile.mjs                  # after changing the deck layout
 npm run watch                                   # rebuild + restart on change
+npm run update                                  # on another Mac: pull main, npm ci if needed, test, build, restart
+scripts/update.sh --release                     # or install the latest GitHub release (no checkout)
 ```
 
 Dev mode must be enabled once: `streamdeck dev`.
@@ -66,7 +68,7 @@ Dev mode must be enabled once: `streamdeck dev`.
 5. **Status** from the leading glyph of the tab title: braille spinner = `working`; `✳` = `your turn`
    (finished / asking / needs confirm); else `idle`. (A pending prompt and "done" both read as `✳` —
    indistinguishable from outside the process.)
-6. **Codex status** comes from the latest local `thread_turns` row (`inProgress` → working; completed/interrupted/failed → your turn), falling back to bounded rollout lifecycle reads and CLI output activity. Approval/question prompts may remain working. Read SQLite with `/usr/bin/sqlite3 -readonly`; exclude archived tasks and subagents. Desktop presses use `/usr/bin/open codex://threads/<validated UUID>`.
+6. **Codex status** comes from the latest local `thread_turns` row (`inProgress` → working; completed/interrupted/failed → your turn), falling back to bounded rollout lifecycle reads and CLI output activity. Approval/question prompts may remain working. Long tasks are split into rollout segments (`rollout-…-<taskId>_<segmentId>.jsonl`) and newer turns are keyed by the segment ID, so query both. A finished turn is `idle`, not your turn, when `thread_read_receipts.first_unread_turn` is empty (already read) or the task is the `target_thread_id` of an active `automations/*/automation.toml` (scheduled heartbeat). Read SQLite with `/usr/bin/sqlite3 -readonly`; when Codex has closed a WAL database and removed its `-wal`/`-shm` files, read-only open fails, so retry with an `immutable=1` URI. Exclude archived tasks and subagents. Desktop presses use `/usr/bin/open codex://threads/<validated UUID>`.
 7. **Key roles by relative position** (per device, sorted by row then column — never absolute coords):
    - **1 key** = a standalone summary card; press → `switchToProfile("Claude Sessions")` (the deck).
    - **≥2 keys** (the deck) = first key is a `‹ Summary` control (press → `switchToProfile(undefined)`,

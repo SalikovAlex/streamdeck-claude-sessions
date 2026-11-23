@@ -1,12 +1,13 @@
 {
 	"name": "streamdeck-claude-sessions",
-	"version": "0.2.4",
+	"version": "0.2.5",
 	"description": "Stream Deck + sessions for Claude Code, Codex CLI, and the Codex desktop app.",
 	"author": "Alexander Salikov",
 	"scripts": {
 		"build": "rollup -c",
 		"test": "node --test tests/*.test.mjs",
 		"typecheck": "tsc --noEmit",
+		"update": "scripts/update.sh",
 		"watch": "rollup -c -w --watch.onEnd=\"npx @elgato/cli restart com.salikov.claude-sessions\""
 	},
 	"type": "module",

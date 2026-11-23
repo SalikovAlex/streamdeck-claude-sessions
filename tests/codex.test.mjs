@@ -79,3 +79,41 @@ test("missing session files are isolated without creating Codex databases", asyn
 	const result = await c.readCodexThreads([{ id, home: "/nonexistent-codex-home", rollout: "/missing.jsonl" }]);
 	assert.equal(result.size, 0);
 });
+
+test("segmented rollouts keep the task ID and read newer turns stored under the segment ID", { skip: process.platform !== "darwin" }, async (t) => {
+	const home = await mkdtemp(join(tmpdir(), "streamdeck-codex-segment-"));
+	t.after(() => rm(home, { recursive: true, force: true }));
+	const segment = "01a204e6-0519-7e10-ba58-6cfdc8598470";
+	const rollout = `${home}/sessions/2026/11/22/rollout-2026-11-22T20-15-13-${id}_${segment}.jsonl`;
+	assert.deepEqual(c.codexReferences([rollout]), [{ id, home, rollout }]);
+	execFileSync("/usr/bin/sqlite3", [join(home, "state_5.sqlite"), `CREATE TABLE threads (id TEXT,cwd TEXT,title TEXT,source TEXT,archived INTEGER,rollout_path TEXT); INSERT INTO threads VALUES ('${id}','/tmp/project','Long task','vscode',0,'${rollout}');`]);
+	execFileSync("/usr/bin/sqlite3", [join(home, "thread_history_1.sqlite"), `CREATE TABLE thread_turns (thread_id TEXT,status TEXT,rollout_ordinal INTEGER); INSERT INTO thread_turns VALUES ('${id}','completed',10),('${segment}','inProgress',20);`]);
+	const result = await c.readCodexThreads([{ id, home }]);
+	assert.equal(result.get(id)?.status, "working");
+});
+
+test("finished tasks you already read, and scheduled automation tasks, are idle rather than your turn", { skip: process.platform !== "darwin" }, async (t) => {
+	const home = await mkdtemp(join(tmpdir(), "streamdeck-codex-read-"));
+	t.after(() => rm(home, { recursive: true, force: true }));
+	const third = "01a0788b-0000-7000-8000-000000000003";
+	execFileSync("/usr/bin/sqlite3", [join(home, "state_5.sqlite"), `CREATE TABLE threads (id TEXT,cwd TEXT,title TEXT,source TEXT,archived INTEGER,rollout_path TEXT); INSERT INTO threads VALUES ('${id}','/tmp/a','Read','vscode',0,''),('${other}','/tmp/b','Unread','vscode',0,''),('${third}','/tmp/c','Heartbeat','vscode',0,''); CREATE TABLE thread_read_receipts (thread_id TEXT,first_unread_turn TEXT,revision TEXT,last_published_turn TEXT); INSERT INTO thread_read_receipts VALUES ('${id}',NULL,'r','x'),('${other}','turn-2','r','y'),('${third}','turn-3','r','z');`]);
+	execFileSync("/usr/bin/sqlite3", [join(home, "thread_history_1.sqlite"), `CREATE TABLE thread_turns (thread_id TEXT,status TEXT,rollout_ordinal INTEGER); INSERT INTO thread_turns VALUES ('${id}','completed',1),('${other}','completed',1),('${third}','completed',1);`]);
+	await mkdir(join(home, "automations", "heartbeat"), { recursive: true });
+	await writeFile(join(home, "automations", "heartbeat", "automation.toml"), `version = 1\nkind = "heartbeat"\nstatus = "ACTIVE"\ntarget_thread_id = "${third}"\n`);
+	const result = await c.readCodexThreads([{ id, home }, { id: other, home }, { id: third, home }]);
+	assert.deepEqual([id, other, third].map((key) => result.get(key)?.status), ["idle", "waiting", "idle"]);
+});
+
+test("WAL databases whose -wal/-shm files were removed on close are still read without writing", { skip: process.platform !== "darwin" }, async (t) => {
+	const home = await mkdtemp(join(tmpdir(), "streamdeck-codex-wal-"));
+	t.after(() => rm(home, { recursive: true, force: true }));
+	const db = join(home, "state_5.sqlite");
+	execFileSync("/usr/bin/sqlite3", [db, `PRAGMA journal_mode=WAL; CREATE TABLE threads (id TEXT,cwd TEXT,title TEXT,source TEXT,archived INTEGER,rollout_path TEXT); INSERT INTO threads VALUES ('${id}','/tmp/project','WAL task','vscode',0,''); PRAGMA wal_checkpoint(TRUNCATE);`]);
+	const { readdirSync } = await import("node:fs");
+	await rm(`${db}-wal`, { force: true });
+	await rm(`${db}-shm`, { force: true });
+	assert.deepEqual(readdirSync(home), ["state_5.sqlite"]);
+	const result = await c.readCodexThreads([{ id, home }]);
+	assert.equal(result.get(id)?.title, "WAL task");
+	assert.deepEqual(readdirSync(home), ["state_5.sqlite"]);
+});

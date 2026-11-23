@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5 — 2026-11-23
+
+- Codex tasks that a scheduled automation (heartbeat) posts into show as idle after a run, not "your turn".
+- Codex tasks whose result you have already read in the app show as idle, using the app's read receipts.
+- Read the latest turn of long Codex tasks that are split into rollout segments.
+- Read Codex databases after Codex closes them and removes the WAL side files; titles and statuses no longer fall back to rollout files.
+- Add `scripts/update.sh` (`npm run update`) to pull, rebuild and restart a dev checkout, or `--release` to install the latest release.
+
 ## 0.2.4 — 2026-11-23
 
 - Detect Codex desktop tasks again with current ChatGPT.app builds, which moved the Codex binary to `Resources/codex-cli/CodexCLI.app`.
