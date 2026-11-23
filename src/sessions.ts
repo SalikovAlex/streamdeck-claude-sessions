@@ -48,7 +48,8 @@ function codexPositionals(args: string[]): string[] {
 
 function agentProcess(proc: Proc): AgentProcess | undefined {
 	// Match the full app path first: application names and enclosing directories can contain spaces.
-	const appCommand = proc.args.match(/^\/?[^\n]*\/(?:Codex|ChatGPT)\.app\/Contents\/Resources\/codex(?:\s+(.*))?$/);
+	// ChatGPT.app now nests the binary in Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex.
+	const appCommand = proc.args.match(/^\/?[^\n]*\/(?:Codex|ChatGPT)\.app\/Contents\/Resources\/(?:codex-cli\/CodexCLI\.app\/Contents\/MacOS\/)?codex(?:\s+(.*))?$/);
 	const argv = appCommand ? ["codex", ...words(appCommand[1] ?? "")] : words(proc.args);
 	if (appCommand && codexPositionals(argv.slice(1))[0] === "app-server") {
 		return { proc, provider: "codex", source: "desktop" };
@@ -59,7 +60,11 @@ function agentProcess(proc: Proc): AgentProcess | undefined {
 		if (/(?:^|\/)@openai\/codex\/bin\/codex\.js$/.test(script) || /(?:^|\/)codex(?:\.js)?$/.test(script)) executable = "codex";
 		else return;
 	}
-	if (executable === "claude") return { proc, provider: "claude", source: "cli" };
+	if (executable === "claude") {
+		// Helpers such as the Chrome native-messaging host run without a terminal.
+		if (!hasTty(proc.tty) || argv.includes("--chrome-native-host")) return;
+		return { proc, provider: "claude", source: "cli" };
+	}
 	if (executable !== "codex" || !hasTty(proc.tty)) return;
 	const command = codexPositionals(argv)[0];
 	if (argv.some((a) => ["--help", "-h", "--version", "-V"].includes(a)) || CODEX_COMMANDS.has(command)) return;

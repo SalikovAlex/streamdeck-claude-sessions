@@ -21,9 +21,12 @@ test("mixed Claude, native Codex, npm Codex and desktop processes; exclude servi
 500 200 s002 /opt/bin/codex resume --last
 501 200 s003 codex -c model=test "fix the app-server config"
 502 200 s004 /Volumes/My Disk/Codex.app/Contents/Resources/codex "fix the app-server config"
+600 1 ?? /Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex -c features.code_mode_host=true app-server --analytics-default-enabled
+601 1 ?? /Users/salik/.local/bin/claude --chrome-native-host
+602 100 s001 claude --chrome-native-host
 `);
 	assert.deepEqual(s.detectAgents(procs).map((a) => [a.proc.pid, a.provider, a.source]), [
-		[101, "claude", "cli"], [202, "codex", "cli"], [300, "codex", "desktop"], [301, "codex", "desktop"], [500, "codex", "cli"], [501, "codex", "cli"], [502, "codex", "cli"],
+		[101, "claude", "cli"], [202, "codex", "cli"], [300, "codex", "desktop"], [301, "codex", "desktop"], [500, "codex", "cli"], [501, "codex", "cli"], [502, "codex", "cli"], [600, "codex", "desktop"],
 	]);
 });
 

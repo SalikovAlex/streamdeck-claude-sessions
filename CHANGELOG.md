@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.4 — 2026-11-23
+
+- Detect Codex desktop tasks again with current ChatGPT.app builds, which moved the Codex binary to `Resources/codex-cli/CodexCLI.app`.
+- Ignore Claude Code helper processes without a terminal (such as `claude --chrome-native-host`), which showed up as phantom sessions.
+- Verified with Claude Code 2.1.330 and Codex CLI 0.171.0.
+
+## 0.2.3 — 2026-09-13
 
 - Use transparent SVG icons in the Stream Deck action list and category.
 - Improve public setup instructions, document local diagnostic data, and exclude credential and editor files.
