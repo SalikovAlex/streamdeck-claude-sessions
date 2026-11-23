@@ -125,8 +125,14 @@ export function cleanTabName(name: string | undefined): string {
 	return (name ?? "").replace(/^[^\p{L}\p{N}]+/u, "").replace(/\s*\(.*$/, "").trim();
 }
 
+/** Codex CLI titles the terminal "[ ! ] Action Required" (blinking with "[ . ]") while an approval or question waits. */
+export function needsAction(iterm: ItermSession | undefined): boolean {
+	return /\bAction Required\b/i.test(iterm?.name ?? "");
+}
+
 export function statusFromTab(iterm: ItermSession | undefined, provider: Provider): SessionStatus {
 	if (!iterm) return "idle";
+	if (needsAction(iterm)) return "waiting";
 	const glyph = iterm.name.trimStart().codePointAt(0) ?? 0;
 	if (glyph >= 0x2800 && glyph <= 0x28ff) return "working";
 	if (provider === "claude" && glyph === 0x2733) return "waiting";

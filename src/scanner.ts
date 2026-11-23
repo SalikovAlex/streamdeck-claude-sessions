@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { basename } from "node:path";
 import { promisify } from "node:util";
 import { codexReferences, readCodexThreads } from "./codex";
-import { cleanTabName, detailFromArgs, detectAgents, parseLsof, parseProcesses, resolveTerminalTty, statusFromTab, type ItermSession, type Session } from "./sessions";
+import { cleanTabName, detailFromArgs, detectAgents, needsAction, parseLsof, parseProcesses, resolveTerminalTty, statusFromTab, type ItermSession, type Session } from "./sessions";
 
 const exec = promisify(execFile);
 const pexec = (file: string, args: string[]) => exec(file, args, { timeout: 3000, maxBuffer: 8 * 1024 * 1024 });
@@ -51,12 +51,14 @@ async function scanSessions(report: (message: string) => void): Promise<Session[
 		const thread = (refsByPid.get(proc.pid) ?? []).map((ref) => threads.get(ref.id)).find((t) => t !== undefined);
 		if (thread) cliThreadIds.add(thread.id);
 		const tty = resolveTerminalTty(proc.pid, procs, itermTtys);
+		const tab = iterm.get(tty);
 		const cwd = thread?.cwd || cwdByPid.get(proc.pid)?.[0] || "";
 		sessions.push({
 			id: `${provider}:cli:${proc.pid}`, provider, source: "cli", pid: proc.pid, tty, cwd,
 			project: cwd ? basename(cwd) : provider,
-			detail: thread?.title || detailFromArgs(proc.args, provider) || cleanTabName(iterm.get(tty)?.name),
-			status: thread?.status ?? statusFromTab(iterm.get(tty), provider), threadId: thread?.id,
+			detail: thread?.title || detailFromArgs(proc.args, provider) || (needsAction(tab) ? "" : cleanTabName(tab?.name)),
+			// The turn stays in progress while Codex waits on a prompt; the terminal title shows it is your turn.
+			status: needsAction(tab) ? "waiting" : thread?.status ?? statusFromTab(tab, provider), threadId: thread?.id,
 		});
 	}
 	const desktopIds = new Set(cliThreadIds);

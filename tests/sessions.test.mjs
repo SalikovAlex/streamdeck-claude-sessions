@@ -65,3 +65,12 @@ test("lsof preserves multiple paths, whitespace, and repeated process sections",
 		[12, ["/Users/me/My Project", "/Users/me/.codex/sessions/a.jsonl"]], [13, ["/tmp"]],
 	]);
 });
+
+test("Codex CLI approval and question prompts read as your turn from the terminal title", () => {
+	for (const name of ["[ ! ] Action Required", "[ . ] Action Required"]) {
+		assert.equal(s.needsAction({ name, processing: true }), true);
+		assert.equal(s.statusFromTab({ name, processing: true }, "codex"), "waiting");
+	}
+	assert.equal(s.needsAction({ name: "⠋ my-project", processing: true }), false);
+	assert.equal(s.needsAction(undefined), false);
+});

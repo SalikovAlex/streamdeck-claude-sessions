@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6 — 2026-11-23
+
+- Codex CLI sessions show "your turn" while Codex waits for an approval or an answer, detected from the `Action Required` terminal title, instead of "working".
+
 ## 0.2.5 — 2026-11-23
 
 - Codex tasks that a scheduled automation (heartbeat) posts into show as idle after a run, not "your turn".
